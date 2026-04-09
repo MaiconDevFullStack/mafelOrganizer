@@ -175,14 +175,54 @@ router.post('/initiate', async (req, res) => {
 });
 
 // ─── GET /api/subscriptions/check/:mpPaymentId ──────────────────────────────
-// Polling de status pelo frontend enquanto o usuário vê o QR code
+// Polling de status — consulta o MP em tempo real e ativa o tenant se aprovado.
+// Garante que o pagamento seja confirmado mesmo que o webhook falhe/atrase.
 router.get('/check/:mpPaymentId', async (req, res) => {
   try {
     const sub = await Subscription.findOne({
-      where: { mp_payment_id: req.params.mpPaymentId },
+      where:   { mp_payment_id: req.params.mpPaymentId },
       include: [{ model: Tenant, as: 'tenant', attributes: ['slug', 'name', 'is_active'] }],
     });
     if (!sub) return res.status(404).json({ error: 'Assinatura não encontrada.' });
+
+    // Consulta status atualizado diretamente no Mercado Pago
+    if (sub.status !== 'active' && sub.mp_payment_id) {
+      try {
+        const mpClient   = buildMPClient();
+        const paymentApi = new Payment(mpClient);
+        const mpPayment  = await paymentApi.get({ id: sub.mp_payment_id });
+        const mpStatus   = mpPayment.status;
+
+        sub.mp_status = mpStatus;
+
+        if (mpStatus === 'approved') {
+          const planInfo  = PLANS[sub.plan] || PLANS.monthly;
+          const startsAt  = new Date();
+          const expiresAt = new Date(startsAt.getTime() + planInfo.days * 24 * 60 * 60 * 1000);
+
+          sub.status     = 'active';
+          sub.starts_at  = startsAt;
+          sub.expires_at = expiresAt;
+
+          await Tenant.update({ is_active: true }, { where: { id: sub.tenant_id } });
+          await User.update(
+            { is_active: true },
+            { where: { tenant_id: sub.tenant_id, role: 'provider' } }
+          );
+          console.log(`✅  [check] Assinatura ${sub.id} ATIVA via polling — tenant ${sub.tenant_id}`);
+        } else if (['rejected', 'cancelled'].includes(mpStatus)) {
+          sub.status = 'cancelled';
+        }
+
+        await sub.save();
+
+        // Recarrega o tenant atualizado
+        await sub.reload({ include: [{ model: Tenant, as: 'tenant', attributes: ['slug', 'name', 'is_active'] }] });
+      } catch (mpErr) {
+        console.error('check: erro ao consultar MP:', mpErr.message);
+        // Continua e retorna o status atual do banco sem quebrar
+      }
+    }
 
     return res.json({
       status:      sub.status,
