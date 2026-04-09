@@ -525,11 +525,90 @@ a:hover { text-decoration: underline; }
 
 /* ── Responsive ───────────────────────────────────────────── */
 @media (max-width: 768px) {
+  /* Sidebar: esconde e abre como drawer */
   .adm-sidebar { transform: translateX(-100%); }
   .adm-sidebar.open { transform: translateX(0); }
   .adm-main { margin-left: 0; }
   .adm-hamburger { display: block; }
+
+  /* Topbar */
+  .adm-topbar { padding: 0 12px; gap: 8px; }
+  .adm-page-title { font-size: 15px; }
+  .adm-topbar-right { gap: 6px; }
+  .adm-tenant-chip {
+    max-width: 110px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Conteúdo principal */
+  .adm-content { padding: 14px 12px; }
+
+  /* Stat cards */
   .stat-number { font-size: 20px; }
   .stat-number.small-num { font-size: 14px; }
-  .adm-modal-box { max-width: 100%; }
+  .stat-card { padding: 12px 10px; gap: 10px; }
+  .stat-icon { width: 40px; height: 40px; font-size: 17px; }
+
+  /* Toolbar: empilha verticalmente */
+  .adm-toolbar { flex-direction: column; align-items: stretch; }
+  .adm-toolbar .input-group { max-width: 100% !important; width: 100%; }
+  .adm-toolbar > .btn,
+  .adm-toolbar > .btn-group,
+  .adm-toolbar > button { width: 100%; }
+
+  /* Tabelas — adiciona scroll horizontal via wrapper Bootstrap */
+  .adm-table { font-size: 12.5px; }
+  .adm-table thead th { font-size: 10px; }
+  .adm-table .nowrap { white-space: nowrap; }
+
+  /* Upload: empilha colunas */
+  .adm-card-body .row [class*="col-sm-"] { width: 100%; float: none; }
+
+  /* Modal */
+  .adm-modal { padding: 10px; align-items: flex-end; }
+  .adm-modal-box { max-width: 100%; border-radius: 16px 16px 0 0; max-height: 95vh; }
+  .adm-modal-lg  { max-width: 100%; }
+  .adm-modal-body { padding: 14px; }
+  .adm-modal-foot { padding: 10px 14px; flex-wrap: wrap; gap: 8px; }
+  .adm-modal-foot .btn { flex: 1; min-width: 0; }
+
+  /* Toast: full-width na base */
+  .adm-toast {
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    max-width: 100%;
+    border-radius: 10px;
+  }
+
+  /* Profile preview: centraliza e ajusta tamanho */
+  .profile-preview-chat { width: 100%; max-width: 280px; }
+  .adm-card-body[style*="justify-content:center"] { padding: 16px !important; }
+}
+
+@media (max-width: 480px) {
+  /* Topbar: esconde chip de tenant para economizar espaço */
+  .adm-tenant-chip { display: none; }
+  .adm-page-title { font-size: 14px; }
+  .adm-topbar-right .btn { font-size: 12px; padding: 4px 8px; }
+
+  /* Stat cards: fonte ainda menor no 2-col */
+  .stat-number.small-num { font-size: 13px; }
+  .stat-desc { font-size: 11px; }
+
+  /* Toolbar botões empilhados */
+  .adm-toolbar .btn-group { width: 100%; display: flex; }
+  .adm-toolbar .btn-group .btn { flex: 1; }
+
+  /* Tabela: reduz mais */
+  .adm-table { font-size: 12px; }
+
+  /* Padding dos cards */
+  .adm-card-body { padding: 12px; }
+  .adm-card-header { padding: 10px 12px; font-size: 13px; }
+
+  /* Linhas de form dentro de modais: empilha */
+  .adm-modal-body .row [class*="col-sm-"] { width: 100%; float: none; }
 }

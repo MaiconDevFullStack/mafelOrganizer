@@ -380,15 +380,64 @@ html, body {
 @media (max-width: 768px) {
   .chat-container  { max-width: 100%; }
   .message-bubble  { max-width: 85%; }
-  .chat-header     { padding: 10px 14px; }
-  .header-title    { font-size: 14px; }
-  .messages-area   { padding: 14px 10px 6px; }
-  .input-area      { padding: 10px 10px 6px; }
+
+  /* Header */
+  .chat-header   { padding: 10px 12px; }
+  .header-title  { font-size: 14px; }
+  .header-logo, .header-icon { width: 34px; height: 34px; }
+  .header-left   { gap: 8px; }
+  .header-actions .btn-icon { padding: 5px 8px; font-size: 14px; }
+
+  /* Mensagens */
+  .messages-area { padding: 12px 8px 6px; gap: 8px; }
+
+  /* Input */
+  .input-area    { padding: 8px 8px 6px; }
+  .input-wrapper { padding: 6px 6px 6px 12px; }
+  .chat-input    { font-size: 14px; }
+
+  /* Booking banner */
+  .booking-mode-banner { margin: 0 6px 4px; padding: 5px 10px; font-size: 11px; }
+  .booking-action-bar  { padding: 4px 10px 2px; }
+  .booking-cta-btn     { font-size: 12px; padding: 7px 16px; }
 }
 
-@media (max-width: 400px) {
-  .message-bubble { max-width: 92%; font-size: 13px; }
-  .quick-reply-btn { font-size: 12px; padding: 5px 10px; }
+@media (max-width: 480px) {
+  /* Container ocupa tudo sem padding lateral */
+  .chat-container { height: calc(100dvh - 58px); }
+
+  /* Header: título menor, sem espaços desnecessários */
+  .chat-header   { padding: 8px 10px; }
+  .header-title  { font-size: 13px; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .header-status { font-size: 11px; }
+
+  /* Bolhas mais largas */
+  .message-bubble { max-width: 90%; }
+  .message-bubble p { font-size: 13.5px; }
+
+  /* Quick replies: scroll horizontal em vez de quebrar */
+  .quick-replies {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 6px 10px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .quick-replies::-webkit-scrollbar { display: none; }
+  .quick-reply-btn { flex-shrink: 0; font-size: 12px; padding: 5px 10px; }
+
+  /* Input */
+  .send-btn { width: 34px; height: 34px; font-size: 14px; }
+  .powered-by { font-size: 10px; }
+
+  /* Booking banner compacto */
+  .booking-mode-banner { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .booking-cancel-btn  { align-self: flex-end; }
+}
+
+@media (max-width: 360px) {
+  .message-bubble { max-width: 94%; }
+  .header-title   { max-width: 110px; }
 }
 
 /* ═══════════════════════════════════════════════════════════

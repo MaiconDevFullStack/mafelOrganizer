@@ -481,8 +481,45 @@ body {
 
 /* ── Responsivo ── */
 @media (max-width: 480px) {
+  /* Layout base */
   body { padding: 16px 12px 32px; }
-  .reg-body { padding: 18px 18px; }
+
+  /* Card */
   .reg-header { padding: 22px 18px 18px; }
-  .price-value { font-size: 30px; }
+  .reg-header h1 { font-size: 19px; }
+  .reg-body { padding: 18px 16px; }
+
+  /* Progress steps: texto menor, linhas mais compactas */
+  .reg-progress { padding: 10px 12px; }
+  .ps-label { font-size: 9px; }
+  .ps-circle { width: 26px; height: 26px; font-size: 12px; }
+  .ps-line { margin: 0 4px; margin-bottom: 14px; }
+
+  /* Preços */
+  .price-value { font-size: 28px; }
+  .price-cents { font-size: 15px; }
+  .price-currency { font-size: 14px; }
+
+  /* Plan cards */
+  .plan-card { padding: 12px; gap: 10px; }
+  .plan-badge { font-size: 10px; padding: 2px 7px; }
+
+  /* Botões: empilham em coluna */
+  .btn-row { flex-direction: column; }
+  .btn-row .btn-back,
+  .btn-row .btn-primary-full { width: 100%; }
+
+  /* PIX QR */
+  .pix-qr-img { width: 170px; height: 170px; }
+
+  /* Alerta e hints */
+  .alert-error { margin: 0 0 10px; }
+}
+
+@media (max-width: 360px) {
+  body { padding: 10px 8px 24px; }
+  .reg-card { border-radius: 14px; }
+  .reg-header h1 { font-size: 17px; }
+  .ps-label { display: none; }
+  .price-value { font-size: 26px; }
 }
