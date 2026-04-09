@@ -31,7 +31,8 @@ body {
   color: var(--text);
   margin: 0;
   padding: 0;
-  overflow-x: hidden;
+  overflow: hidden;        /* scroll acontece dentro do .adm-content */
+  overscroll-behavior: none; /* evita bounce do iOS na página principal */
 }
 
 a { cursor: pointer; color: var(--blue); }
@@ -117,9 +118,11 @@ a:hover { text-decoration: underline; }
 /* ── Main ─────────────────────────────────────────────────── */
 .adm-main {
   margin-left: var(--sidebar-w);
-  min-height: 100vh;
+  height: 100vh;        /* fallback */
+  height: 100dvh;       /* dinâmica: exclui barra do iOS */
   display: flex;
   flex-direction: column;
+  overflow: hidden;     /* contém o scroll dentro do content */
   transition: margin .28s;
 }
 
@@ -132,8 +135,7 @@ a:hover { text-decoration: underline; }
   align-items: center;
   padding: 0 20px;
   gap: 12px;
-  position: sticky;
-  top: 0;
+  flex-shrink: 0;       /* não comprime: garante topbar sempre visível */
   z-index: 100;
   box-shadow: var(--shadow);
 }
@@ -175,7 +177,10 @@ a:hover { text-decoration: underline; }
 .adm-content {
   padding: 24px;
   flex: 1;
+  min-height: 0;                        /* essencial para flex overflow */
   position: relative;
+  overflow-y: auto;                     /* scroll das páginas normais aqui */
+  -webkit-overflow-scrolling: touch;
 }
 
 /* ── Loading ──────────────────────────────────────────────── */
@@ -544,6 +549,7 @@ a:hover { text-decoration: underline; }
 
   /* Conteúdo principal */
   .adm-content { padding: 14px 12px; }
+  /* .adm-content--nopad: height é herdada do flex pai, sem override necessário */
 
   /* Stat cards */
   .stat-number { font-size: 20px; }
@@ -617,9 +623,13 @@ a:hover { text-decoration: underline; }
    INBOX DE CONVERSAS (Chat do Prestador)
 ════════════════════════════════════════════════════════════ */
 
-/* adm-content sem padding quando exibe o inbox */
+/* adm-content sem padding quando exibe o inbox.
+   Como adm-main tem height: 100dvh e adm-topbar tem flex-shrink: 0,
+   este elemento recebe automaticamente a altura restante via flex: 1. */
 .adm-content--nopad {
   padding: 0;
+  flex: 1;
+  min-height: 0;          /* essencial: deixa o flex encolher */
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -627,22 +637,26 @@ a:hover { text-decoration: underline; }
 
 /* Wrapper principal: 2 colunas lado-a-lado */
 .inbox-wrap {
-  display: flex;
   flex: 1;
   min-height: 0;
+  display: flex;
   background: var(--card-bg);
   overflow: hidden;
+  width: 100%;
 }
 
 /* ── Painel esquerdo: lista de conversas ─────────────────── */
 .inbox-list {
   width: 300px;
   min-width: 260px;
+  max-width: 300px;
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   background: #fafafa;
   flex-shrink: 0;
+  height: 100%;           /* preenche todo o container pai */
+  overflow: hidden;
 }
 
 .inbox-list-head {
@@ -675,7 +689,12 @@ a:hover { text-decoration: underline; }
   border-color: var(--blue);
 }
 
-.inbox-list-body { flex: 1; overflow-y: auto; }
+.inbox-list-body {
+  flex: 1;
+  min-height: 0;          /* permite contração no flex */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
 
 .inbox-conv-item {
   display: flex;
@@ -764,6 +783,9 @@ a:hover { text-decoration: underline; }
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  height: 100%;           /* preenche container, permite overflow interno */
+  overflow: hidden;
 }
 
 .inbox-no-conv {
@@ -807,13 +829,15 @@ a:hover { text-decoration: underline; }
 /* Área de mensagens */
 .inbox-messages {
   flex: 1;
+  min-height: 0;          /* permite o scroll funcionar em flex */
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding: 16px 14px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   background: #f8fafc;
-  min-height: 0;
+  overscroll-behavior: contain;
 }
 
 .inbox-loading {
@@ -873,6 +897,7 @@ a:hover { text-decoration: underline; }
 /* Input de resposta */
 .inbox-input-wrap {
   padding: 10px 14px;
+  padding-bottom: max(10px, env(safe-area-inset-bottom)); /* iOS safe area */
   border-top: 1px solid var(--border);
   background: #fff;
   display: flex;
@@ -929,59 +954,103 @@ a:hover { text-decoration: underline; }
 
 /* ── Responsividade do Inbox ─────────────────────────────── */
 
-/* Tablet / Mobile ≤ 768px: painéis viram telas separadas */
+/* ── Tablet médio (769–1024px): colunas ligeiramente comprimidas ── */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .inbox-list {
+    width: 220px;
+    min-width: 200px;
+    max-width: 220px;
+  }
+  .inbox-msg-bubble { max-width: 72%; }
+}
+
+/* ── Desktop ≥ 769px: dois painéis sempre visíveis ── */
+@media (min-width: 769px) {
+  .inbox-list--hidden { display: flex !important; }
+  .inbox-chat         { display: flex !important; }
+  .inbox-back-btn     { display: none !important; }
+}
+
+/* ── Mobile/Tablet ≤ 768px: painéis viram telas separadas (drawer) ── */
 @media (max-width: 768px) {
-  .inbox-wrap { flex-direction: column; }
+  /* adm-main já tem height:100dvh no base — garante que funcione sem sidebar */
+  .adm-main { overflow: hidden; }
 
-  /* Lista: ocupa tela inteira */
-  .inbox-list { width: 100%; min-width: unset; border-right: none; }
+  .inbox-wrap {
+    flex-direction: column;
+    height: 100%;           /* herda a altura do adm-content--nopad */
+  }
 
-  /* Oculta lista quando visualizando chat */
+  /* Lista: tela inteira */
+  .inbox-list {
+    width: 100%;
+    max-width: 100%;
+    min-width: unset;
+    border-right: none;
+    height: 100%;
+    flex: 1;
+  }
+
+  /* Oculta lista quando vendo o chat */
   .inbox-list--hidden { display: none !important; }
 
-  /* Painel de chat: oculto por padrão, exibido quando ativo */
-  .inbox-chat { display: none; }
+  /* Chat: oculto por padrão, ativo quando selecionado */
+  .inbox-chat { display: none !important; }
   .inbox-chat--active {
-    display: flex;
+    display: flex !important;
     flex: 1;
+    height: 100%;
     min-height: 0;
   }
 
-  /* Botão voltar visível em mobile */
-  .inbox-back-btn { display: block !important; }
+  /* Botão voltar */
+  .inbox-back-btn { display: flex !important; align-items: center; }
 
-  /* Bolhas um pouco mais largas */
+  /* Bolhas mais largas */
   .inbox-msg-bubble { max-width: 80%; }
+
+  /* Input: compensar teclado virtual no iOS */
+  .inbox-input-wrap {
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
 }
 
-/* Desktop ≥ 769px: garante exibição dos dois painéis */
-@media (min-width: 769px) {
-  .inbox-list--hidden { display: flex !important; }
-  .inbox-chat { display: flex !important; }
-  .inbox-back-btn { display: none !important; }
-}
-
-/* Mobile compacto ≤ 480px */
+/* ── Mobile compacto ≤ 480px ── */
 @media (max-width: 480px) {
-  .inbox-list-head { padding: 10px 12px; }
-  .inbox-chat-head { padding: 9px 10px; gap: 7px; }
-  .inbox-messages  { padding: 10px; gap: 6px; }
+  .inbox-list-head  { padding: 10px 12px; }
+  .inbox-chat-head  { padding: 8px 10px; gap: 6px; }
+  .inbox-messages   { padding: 8px 10px; gap: 5px; }
+
+  .inbox-conv-item  { padding: 10px 12px; gap: 8px; }
+  .inbox-avatar     { width: 36px; height: 36px; font-size: 13px; }
 
   .inbox-msg-bubble { max-width: 86%; }
   .inbox-msg-bubble p { font-size: 13px; }
 
-  .inbox-input-wrap { padding: 8px 10px; gap: 6px; }
-  .inbox-input { font-size: 13px; }
-  .inbox-send-btn { width: 34px; height: 34px; font-size: 14px; }
+  .inbox-input-wrap { padding: 7px 8px; gap: 6px; padding-bottom: max(7px, env(safe-area-inset-bottom)); }
+  .inbox-input      { font-size: 13px; min-height: 34px; }
+  .inbox-send-btn   { width: 34px; height: 34px; font-size: 14px; }
 
-  /* Header do chat: oculta texto "Encerrar" para caber */
   .inbox-chat-head-info strong { font-size: 13px; }
+  .inbox-chat-head-info span   { font-size: 10px; }
+
+  /* Badge de status no header: não quebra linha */
+  .inbox-badge--sm  { display: none; }
 }
 
-/* Telas muito pequenas ≤ 360px */
+/* ── Telas muito pequenas ≤ 360px ── */
 @media (max-width: 360px) {
   .inbox-list-title { font-size: 13px; }
+  .inbox-filter button { padding: 3px 8px; font-size: 10px; }
+
   .inbox-msg-bubble { max-width: 92%; }
-  .inbox-conv-item  { padding: 10px 10px; gap: 8px; }
-  .inbox-avatar     { width: 34px; height: 34px; font-size: 12px; }
+  .inbox-msg-bubble p { font-size: 12.5px; }
+
+  .inbox-conv-item  { padding: 9px 10px; gap: 7px; }
+  .inbox-avatar     { width: 32px; height: 32px; font-size: 12px; }
+  .inbox-conv-name  { font-size: 12px; }
+  .inbox-conv-preview { font-size: 11px; }
+
+  .inbox-chat-head  { padding: 7px 8px; }
+  .inbox-input      { font-size: 12.5px; }
 }
