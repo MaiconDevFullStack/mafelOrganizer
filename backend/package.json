@@ -9,6 +9,7 @@
     "migrate": "sequelize db:migrate",
     "migrate:undo": "sequelize db:migrate:undo",
     "seed": "sequelize db:seed:all",
+    "seed:superadmin": "node scripts/seed-superadmin.js",
     "test": "jest"
   },
   "dependencies": {
