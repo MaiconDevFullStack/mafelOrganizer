@@ -31,6 +31,8 @@ body {
   color: var(--text);
   margin: 0;
   padding: 0;
+  height: 100vh;
+  height: 100dvh;          /* dinâmica: exclui barra do browser iOS */
   overflow: hidden;        /* scroll acontece dentro do .adm-content */
   overscroll-behavior: none; /* evita bounce do iOS na página principal */
 }
@@ -549,7 +551,12 @@ a:hover { text-decoration: underline; }
 
   /* Conteúdo principal */
   .adm-content { padding: 14px 12px; }
-  /* .adm-content--nopad: height é herdada do flex pai, sem override necessário */
+  /* Garante que o inbox nunca receba padding em mobile */
+  .adm-content--nopad {
+    padding: 0 !important;
+    overflow: hidden !important;
+    overflow-y: hidden !important;
+  }
 
   /* Stat cards */
   .stat-number { font-size: 20px; }
@@ -971,47 +978,67 @@ a:hover { text-decoration: underline; }
   .inbox-back-btn     { display: none !important; }
 }
 
-/* ── Mobile/Tablet ≤ 768px: painéis viram telas separadas (drawer) ── */
+/* ── Mobile/Tablet ≤ 768px: painéis viram telas separadas ── */
 @media (max-width: 768px) {
-  /* adm-main já tem height:100dvh no base — garante que funcione sem sidebar */
-  .adm-main { overflow: hidden; }
-
-  .inbox-wrap {
-    flex-direction: column;
-    height: 100%;           /* herda a altura do adm-content--nopad */
+  /* Garante que adm-main preencha a tela sem scroll externo */
+  .adm-main {
+    overflow: hidden;
+    height: 100vh;
+    height: 100dvh;
   }
 
-  /* Lista: tela inteira */
+  /* inbox-wrap ocupa o espaço restante abaixo do topbar via flex */
+  .inbox-wrap {
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;          /* permite encolher no flex */
+    overflow: hidden;
+  }
+
+  /* Lista: ocupa 100% do inbox-wrap quando visível */
   .inbox-list {
     width: 100%;
     max-width: 100%;
     min-width: unset;
     border-right: none;
-    height: 100%;
     flex: 1;
+    min-height: 0;
+    height: auto;           /* flex cuida da altura, não height:100% */
   }
 
   /* Oculta lista quando vendo o chat */
   .inbox-list--hidden { display: none !important; }
 
-  /* Chat: oculto por padrão, ativo quando selecionado */
+  /* Chat: oculto por padrão */
   .inbox-chat { display: none !important; }
+
+  /* Chat ativo: flex column que preenche o inbox-wrap */
   .inbox-chat--active {
     display: flex !important;
+    flex-direction: column;
     flex: 1;
-    height: 100%;
     min-height: 0;
+    overflow: hidden;
+    width: 100%;
   }
 
-  /* Botão voltar */
+  /* Botão voltar visível em mobile */
   .inbox-back-btn { display: flex !important; align-items: center; }
 
   /* Bolhas mais largas */
   .inbox-msg-bubble { max-width: 80%; }
 
-  /* Input: compensar teclado virtual no iOS */
+  /* Input: compensar safe-area do iOS (notch, barra home) */
   .inbox-input-wrap {
     padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+
+  /* Garante que a área de mensagens rola dentro do container */
+  .inbox-messages {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    height: 0;              /* trick: força o flex a calcular a altura real */
   }
 }
 
