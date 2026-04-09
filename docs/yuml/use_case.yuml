@@ -1,0 +1,11 @@
+
+[Prestador]-(Cadastro de Tenant)
+[Prestador]-(Configurar Agente / Base de Conhecimento)
+[Cliente]-(Atendimento Conversacional)
+[Prestador]-(Agendar Pagamento (cadastrar data de vencimento))
+[Sistema]-(Notificar Cliente automaticamente)
+[Operador Financeiro]-(Gestão de Contas a Pagar/Receber)
+[Administrador da Plataforma]-(Relatórios e Dashboards)
+[Administrador da Plataforma]-(Auditoria e Conformidade)
+
+// Nota: cole o conteúdo acima em https://yuml.me/ para visualizar o diagrama de casos de uso.

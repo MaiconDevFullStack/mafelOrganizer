@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="pt-br" ng-app="mafelApp">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- base href garante que assets relativos (css/, js/) funcionem em URLs do tipo /chat/<slug> -->
+  <base href="/" />
+  <title ng-bind="tenant.name || 'Atendimento'">Atendimento</title>
+
+  <!-- Bootstrap 3 (inclui Glyphicons) -->
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css" />
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap-theme.min.css" />
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Estilos personalizados -->
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+
+<body ng-controller="AppController as vm">
+
+  <!-- ══════════════════════════════════════════════════════════
+       TELA DE CARREGAMENTO
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="splash-screen" ng-if="vm.loading">
+    <div class="splash-inner">
+      <div class="spinner">
+        <span class="glyphicon glyphicon-refresh spin"></span>
+      </div>
+      <p>Carregando...</p>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       APP PRINCIPAL
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="app-wrapper" ng-if="!vm.loading">
+
+    <!-- Fundo customizável por tenant -->
+    <div class="chat-background"
+         ng-style="vm.backgroundStyle"
+         ng-class="{'bg-overlay-dark': vm.tenant.background_url}">
+    </div>
+
+    <!-- ── HEADER ───────────────────────────────────────────── -->
+    <header class="chat-header" ng-style="{'background-color': vm.tenant.primary_color || '#2563eb'}">
+      <div class="header-left">
+        <img ng-if="vm.tenant.logo_url"
+             ng-src="{{vm.tenant.logo_url}}"
+             alt="Logo"
+             class="header-logo" />
+        <span ng-if="!vm.tenant.logo_url" class="header-icon">
+          <span class="glyphicon glyphicon-comment"></span>
+        </span>
+        <div class="header-info">
+          <h1 class="header-title">{{vm.tenant.agent_name || 'Assistente'}}</h1>
+          <span class="header-status">
+            <span class="status-dot"></span> Online
+          </span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-icon" title="Minimizar" ng-click="vm.toggleMinimize()">
+          <span class="glyphicon" ng-class="vm.minimized ? 'glyphicon-chevron-up' : 'glyphicon-chevron-down'"></span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ── CONTAINER PRINCIPAL ──────────────────────────────── -->
+    <div class="chat-container" ng-class="{'minimized': vm.minimized}">
+
+      <!-- ── MENSAGENS ───────────────────────────────────────── -->
+      <div class="messages-area" id="messagesArea">
+
+        <!-- Mensagem de boas-vindas -->
+        <div class="message-row agent-row" ng-if="vm.messages.length === 0">
+          <div class="avatar agent-avatar"
+               ng-style="{'background-color': vm.tenant.primary_color || '#2563eb'}">
+            <span class="glyphicon glyphicon-user"></span>
+          </div>
+          <div class="message-bubble agent-bubble">
+            <p>{{vm.tenant.welcome_message || 'Olá! Como posso ajudar?'}}</p>
+            <span class="msg-time">Agora</span>
+          </div>
+        </div>
+
+        <!-- Lista de mensagens -->
+        <div class="message-row"
+             ng-repeat="msg in vm.messages track by $index"
+             ng-class="msg.author === 'client' ? 'client-row' : 'agent-row'">
+
+          <!-- Avatar (apenas para agente) -->
+          <div class="avatar agent-avatar"
+               ng-if="msg.author !== 'client'"
+               ng-style="{'background-color': vm.tenant.primary_color || '#2563eb'}">
+            <span class="glyphicon glyphicon-user"></span>
+          </div>
+
+          <!-- Bolha de mensagem -->
+          <div class="message-bubble"
+               ng-class="msg.author === 'client' ? 'client-bubble' : 'agent-bubble'">
+            <p ng-bind-html="vm.parseText(msg.text)"></p>
+            <span class="msg-time">{{msg.created_at | date:'HH:mm'}}</span>
+          </div>
+
+          <!-- Avatar do cliente -->
+          <div class="avatar client-avatar" ng-if="msg.author === 'client'">
+            <span class="glyphicon glyphicon-person"></span>
+          </div>
+        </div>
+
+        <!-- Indicador de digitação -->
+        <div class="message-row agent-row typing-row" ng-if="vm.isTyping">
+          <div class="avatar agent-avatar"
+               ng-style="{'background-color': vm.tenant.primary_color || '#2563eb'}">
+            <span class="glyphicon glyphicon-user"></span>
+          </div>
+          <div class="message-bubble agent-bubble typing-bubble">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ── SUGESTÕES RÁPIDAS ───────────────────────────────── -->
+      <div class="quick-replies" ng-if="vm.messages.length === 0 && vm.quickReplies.length > 0">
+        <button class="btn quick-reply-btn"
+                ng-repeat="qr in vm.quickReplies"
+                ng-style="{'border-color': vm.tenant.primary_color || '#2563eb', 'color': vm.tenant.primary_color || '#2563eb'}"
+                ng-click="vm.sendQuickReply(qr)">
+          {{qr}}
+        </button>
+      </div>
+      <!-- ── BOTÃO CONTRATAR SERVIÇO ───────────────────────── -->
+      <div class="booking-action-bar" ng-if="!vm.bookingStep">
+        <button class="btn booking-cta-btn"
+                ng-style="{'background-color': vm.tenant.primary_color || '#2563eb'}"
+                ng-click="vm.startBooking()"
+                ng-disabled="vm.isSending">
+          <span class="glyphicon glyphicon-calendar"></span>
+          Contratar serviço
+        </button>
+      </div>
+
+      <!-- ── BANNER DE MODO AGENDAMENTO ────────────────────── -->
+      <div class="booking-mode-banner" ng-if="vm.bookingStep">
+        <span>
+          <span class="glyphicon glyphicon-calendar"></span>
+          Agendamento em andamento
+        </span>
+        <button class="btn btn-xs booking-cancel-btn" ng-click="vm.cancelBooking()">
+          <span class="glyphicon glyphicon-remove"></span> Cancelar
+        </button>
+      </div>
+      <!-- ── INPUT DE MENSAGEM ───────────────────────────────── -->
+      <div class="input-area">
+        <div class="input-wrapper">
+          <textarea
+            class="chat-input"
+            placeholder="{{vm.bookingStep ? 'Digite sua resposta...' : 'Digite sua mensagem...'}} "
+            ng-model="vm.inputText"
+            ng-keydown="vm.handleKeydown($event)"
+            maxlength="1000"
+            rows="1"
+            id="chatInput"
+          ></textarea>
+          <button
+            class="btn send-btn"
+            ng-style="{'background-color': vm.tenant.primary_color || '#2563eb'}"
+            ng-click="vm.bookingStep ? vm.sendBookingStep() : vm.sendMessage()"
+            ng-disabled="!vm.inputText || vm.inputText.trim() === '' || vm.isSending"
+            title="Enviar (Enter)">
+            <span class="glyphicon"
+                  ng-class="vm.isSending ? 'glyphicon-refresh spin' : 'glyphicon-send'">
+            </span>
+          </button>
+        </div>
+        <div class="input-footer">
+          <span class="powered-by">
+            <span class="glyphicon glyphicon-lock"></span> Atendimento seguro
+          </span>
+        </div>
+      </div>
+
+    </div>
+    <!-- / chat-container -->
+
+  </div>
+  <!-- / app-wrapper -->
+
+  <!-- ══════════════════════════════════════════════════════════
+       SCRIPTS
+  ══════════════════════════════════════════════════════════════ -->
+  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.3/angular.min.js"></script>
+  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.3/angular-sanitize.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

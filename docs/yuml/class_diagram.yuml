@@ -1,0 +1,21 @@
+[Tenant|id;nome;configuracoes]
+[Usuario|id;email;roles]
+[InstanciaAgente|id;versaoKB]
+[BaseConhecimento|documentos;indiceVetor]
+[Conversa|id;iniciadaEm]
+[Mensagem|id;autor;texto;timestamp]
+[AgendamentoPagamento|id;valor;dataVencimento;cron;statusNotificacao]
+[MetodoPagamento|id;tipo;token]
+[Transacao|id;status;valor]
+[Fatura|id;total;status]
+[Cliente|id;nome;email]
+
+[Tenant]1-*[Usuario]
+[Tenant]1-*[InstanciaAgente]
+[InstanciaAgente]1-1[BaseConhecimento]
+[Conversa]1-*[Mensagem]
+[Cliente]1-[MetodoPagamento]
+[AgendamentoPagamento]1-*[Transacao]
+[Transacao]1-1[Fatura]
+
+// Nota: cole o conteúdo acima em https://yuml.me/ para gerar o diagrama de classes.

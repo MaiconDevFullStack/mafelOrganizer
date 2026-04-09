@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html ng-app="mafelAdmin" lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel do Prestador · Mafel</title>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/admin.css" />
+</head>
+<body ng-controller="AdminController as vm">
+
+  <!-- Overlay mobile -->
+  <div class="adm-overlay" ng-class="{open: vm.sidebarOpen}" ng-click="vm.sidebarOpen=false"></div>
+
+  <!-- ══ SIDEBAR ══════════════════════════════════════════════ -->
+  <aside class="adm-sidebar" ng-class="{open: vm.sidebarOpen}">
+    <div class="adm-brand">
+      <span class="glyphicon glyphicon-adjust adm-brand-icon"></span>
+      <span class="adm-brand-name" ng-bind="vm.tenant.name || 'Mafel'"></span>
+    </div>
+
+    <nav class="adm-nav">
+      <a class="adm-nav-item" ng-class="{active: vm.section==='dashboard'}" ng-click="vm.go('dashboard')">
+        <span class="glyphicon glyphicon-dashboard"></span><span>Dashboard</span>
+      </a>
+      <a class="adm-nav-item" ng-class="{active: vm.section==='kb'}" ng-click="vm.go('kb')">
+        <span class="glyphicon glyphicon-book"></span><span>Base de Conhecimento</span>
+      </a>
+      <a class="adm-nav-item" ng-class="{active: vm.section==='clients'}" ng-click="vm.go('clients')">
+        <span class="glyphicon glyphicon-user"></span><span>Clientes</span>
+      </a>
+      <div class="adm-nav-divider">FINANCEIRO</div>
+      <a class="adm-nav-item adm-nav-rec" ng-class="{active: vm.section==='receivable'}" ng-click="vm.go('receivable')">
+        <span class="glyphicon glyphicon-arrow-down"></span><span>Contas a Receber</span>
+      </a>
+      <a class="adm-nav-item adm-nav-pay" ng-class="{active: vm.section==='payable'}" ng-click="vm.go('payable')">
+        <span class="glyphicon glyphicon-arrow-up"></span><span>Contas a Pagar</span>
+      </a>
+      <div class="adm-nav-divider">CONTA</div>
+      <a class="adm-nav-item" ng-class="{active: vm.section==='profile'}" ng-click="vm.go('profile')">
+        <span class="glyphicon glyphicon-cog"></span><span>Meu Perfil</span>
+      </a>
+    </nav>
+
+    <div class="adm-sidebar-footer">
+      <a href="/?tenant={{vm.tenantSlug}}" target="_blank" class="adm-nav-item">
+        <span class="glyphicon glyphicon-comment"></span><span>Abrir Chat</span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- ══ MAIN ═════════════════════════════════════════════════ -->
+  <div class="adm-main">
+    <!-- Topbar -->
+    <header class="adm-topbar">
+      <button class="adm-hamburger" ng-click="vm.sidebarOpen=!vm.sidebarOpen">
+        <span class="glyphicon glyphicon-menu-hamburger"></span>
+      </button>
+      <h1 class="adm-page-title" ng-bind="vm.sectionTitle()"></h1>
+      <div class="adm-topbar-right">
+        <span class="adm-tenant-chip">
+          <span class="glyphicon glyphicon-tag"></span>
+          <span ng-bind="vm.tenantSlug"></span>
+        </span>
+        <button class="btn btn-default btn-xs" ng-click="vm.logout()" title="Sair">
+          <span class="glyphicon glyphicon-log-out"></span> Sair
+        </button>
+      </div>
+    </header>
+
+    <!-- Loading overlay -->
+    <div class="adm-loading" ng-show="vm.globalLoading">
+      <div class="adm-spinner"></div>
+    </div>
+
+    <div class="adm-content">
+
+      <!-- ══ DASHBOARD ══════════════════════════════════════ -->
+      <div ng-show="vm.section==='dashboard'">
+        <div class="row">
+          <div class="col-xs-6 col-md-3">
+            <div class="stat-card stat-blue">
+              <div class="stat-icon"><span class="glyphicon glyphicon-user"></span></div>
+              <div class="stat-info">
+                <div class="stat-number" ng-bind="vm.clients.length"></div>
+                <div class="stat-desc">Clientes</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-xs-6 col-md-3">
+            <div class="stat-card stat-green">
+              <div class="stat-icon"><span class="glyphicon glyphicon-arrow-down"></span></div>
+              <div class="stat-info">
+                <div class="stat-number small-num" ng-bind="(vm.stats.total_receivable || 0) | currency:'R$\u00a0':2"></div>
+                <div class="stat-desc">A Receber</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-xs-6 col-md-3">
+            <div class="stat-card stat-red">
+              <div class="stat-icon"><span class="glyphicon glyphicon-arrow-up"></span></div>
+              <div class="stat-info">
+                <div class="stat-number small-num" ng-bind="(vm.stats.total_payable || 0) | currency:'R$\u00a0':2"></div>
+                <div class="stat-desc">A Pagar</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-xs-6 col-md-3">
+            <div class="stat-card stat-orange">
+              <div class="stat-icon"><span class="glyphicon glyphicon-warning-sign"></span></div>
+              <div class="stat-info">
+                <div class="stat-number" ng-bind="(vm.stats.overdue_receivable||0) + (vm.stats.overdue_payable||0)"></div>
+                <div class="stat-desc">Vencidos</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:20px">
+          <div class="col-sm-6">
+            <div class="adm-card">
+              <div class="adm-card-header">
+                <span class="glyphicon glyphicon-book"></span> Base de Conhecimento
+                <span class="badge adm-badge" ng-bind="vm.kbDocs.length"></span>
+              </div>
+              <div ng-show="vm.kbDocs.length===0" class="adm-empty">
+                Nenhum documento. <a ng-click="vm.go('kb')">Envie o primeiro.</a>
+              </div>
+              <ul class="adm-list" ng-show="vm.kbDocs.length>0">
+                <li ng-repeat="d in vm.kbDocs | limitTo:5">
+                  <span class="glyphicon glyphicon-file text-muted"></span>
+                  <span ng-bind="d.original_name"></span>
+                  <small class="adm-list-meta" ng-bind="vm.fmtSize(d.filesize)"></small>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <div class="adm-card">
+              <div class="adm-card-header">
+                <span class="glyphicon glyphicon-user"></span> Últimos Clientes
+                <a ng-click="vm.go('clients')" class="adm-card-link">Ver todos</a>
+              </div>
+              <div ng-show="vm.clients.length===0" class="adm-empty">
+                Nenhum cliente. <a ng-click="vm.go('clients')">Cadastre o primeiro.</a>
+              </div>
+              <ul class="adm-list" ng-show="vm.clients.length>0">
+                <li ng-repeat="c in vm.clients | limitTo:5">
+                  <span class="glyphicon glyphicon-user text-muted"></span>
+                  <span ng-bind="c.name"></span>
+                  <small class="adm-list-meta" ng-bind="c.email"></small>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ BASE DE CONHECIMENTO ════════════════════════════ -->
+      <div ng-show="vm.section==='kb'">
+        <div class="adm-card" style="margin-bottom:20px">
+          <div class="adm-card-header"><strong>Enviar Documento</strong></div>
+          <div class="adm-card-body">
+            <div class="row">
+              <div class="col-sm-5">
+                <label class="adm-label">Arquivo <small>(PDF, DOCX, TXT, MD — máx 10 MB)</small></label>
+                <div class="upload-zone" ng-class="{hover: vm.kb.drag}" ng-dragover="$event.preventDefault(); vm.kb.drag=true"
+                     ng-dragleave="vm.kb.drag=false" ng-drop="vm.kb.drag=false; vm.kb.file=$event.dataTransfer.files[0]">
+                  <input type="file" id="kbFile"
+                       on-file-change="vm.handleFileChange(file)"
+                       accept=".pdf,.docx,.doc,.txt,.md" style="display:none" />
+                  <label for="kbFile" ng-show="!vm.kb.file" class="upload-prompt">
+                    <span class="glyphicon glyphicon-cloud-upload"></span>
+                    <span>Clique ou arraste o arquivo</span>
+                  </label>
+                  <div ng-show="vm.kb.file" class="upload-chosen">
+                    <span class="glyphicon glyphicon-ok-circle text-success"></span>
+                    <span ng-bind="vm.kb.file.name"></span>
+                    <a ng-click="vm.clearFile()" class="text-danger" style="margin-left:8px">
+                      <span class="glyphicon glyphicon-remove"></span>
+                    </a>
+                  </div>
+                </div>
+              </div>
+              <div class="col-sm-5">
+                <label class="adm-label">Descrição <span class="text-muted">(opcional)</span></label>
+                <textarea class="form-control" ng-model="vm.kb.description" rows="3"
+                          placeholder="Sobre o que é este documento?"></textarea>
+              </div>
+              <div class="col-sm-2" style="display:flex;align-items:flex-end">
+                <button class="btn btn-primary btn-block" ng-click="vm.uploadKb()"
+                        ng-disabled="!vm.kb.file || vm.kb.uploading">
+                  <span class="glyphicon" ng-class="vm.kb.uploading ? 'glyphicon-refresh adm-spin' : 'glyphicon-upload'"></span>
+                  {{ vm.kb.uploading ? 'Enviando…' : 'Enviar' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="adm-card">
+          <div class="adm-card-header">
+            <strong>Documentos</strong>
+            <span class="badge adm-badge" ng-bind="vm.kbDocs.length"></span>
+          </div>
+          <div ng-show="vm.kbDocs.length===0" class="adm-empty" style="padding:32px">
+            Nenhum documento enviado ainda.
+          </div>
+          <div class="table-responsive" ng-show="vm.kbDocs.length>0">
+            <table class="table adm-table">
+              <thead><tr>
+                <th>Arquivo</th><th>Tipo</th><th>Tamanho</th>
+                <th>Descrição</th><th>Enviado em</th><th>Status</th><th></th>
+              </tr></thead>
+              <tbody>
+                <tr ng-repeat="d in vm.kbDocs">
+                  <td><span class="glyphicon glyphicon-file text-muted" style="margin-right:5px"></span>{{d.original_name}}</td>
+                  <td><span class="label label-default" ng-bind="d.filetype.toUpperCase()"></span></td>
+                  <td ng-bind="vm.fmtSize(d.filesize)"></td>
+                  <td ng-bind="d.description || '—'"></td>
+                  <td ng-bind="d.createdAt | date:'dd/MM/yy HH:mm'"></td>
+                  <td>
+                    <span class="label"
+                          ng-class="{'label-success':d.status==='ready','label-warning':d.status==='processing','label-danger':d.status==='error'}">
+                      {{d.status==='ready'?'Pronto':d.status==='processing'?'Processando':'Erro'}}
+                    </span>
+                  </td>
+                  <td>
+                    <button class="btn btn-xs btn-danger" ng-click="vm.deleteKb(d)" title="Remover">
+                      <span class="glyphicon glyphicon-trash"></span>
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ CLIENTES ════════════════════════════════════════ -->
+      <div ng-show="vm.section==='clients'">
+        <div class="adm-toolbar">
+          <div class="input-group" style="max-width:320px">
+            <span class="input-group-addon"><span class="glyphicon glyphicon-search"></span></span>
+            <input type="text" class="form-control" placeholder="Buscar cliente…"
+                   ng-model="vm.clientSearch" ng-change="vm.filterClients()" />
+          </div>
+          <button class="btn btn-primary" ng-click="vm.openClientModal()">
+            <span class="glyphicon glyphicon-plus"></span> Novo Cliente
+          </button>
+        </div>
+
+        <div class="adm-card">
+          <div ng-show="vm.filteredClients.length===0" class="adm-empty" style="padding:32px">
+            <span ng-show="!vm.clientSearch">Nenhum cliente cadastrado.</span>
+            <span ng-show="vm.clientSearch">Nenhum resultado para "<strong ng-bind="vm.clientSearch"></strong>".</span>
+          </div>
+          <div class="table-responsive" ng-show="vm.filteredClients.length>0">
+            <table class="table adm-table">
+              <thead><tr>
+                <th>Nome</th><th>E-mail</th><th>Telefone</th>
+                <th>CPF/CNPJ</th><th>Status</th><th>Ações</th>
+              </tr></thead>
+              <tbody>
+                <tr ng-repeat="c in vm.filteredClients">
+                  <td><strong ng-bind="c.name"></strong></td>
+                  <td ng-bind="c.email || '—'"></td>
+                  <td ng-bind="c.phone || '—'"></td>
+                  <td ng-bind="c.document || '—'"></td>
+                  <td>
+                    <span class="label" ng-class="c.is_active?'label-success':'label-default'">
+                      {{c.is_active?'Ativo':'Inativo'}}
+                    </span>
+                  </td>
+                  <td class="nowrap">
+                    <button class="btn btn-xs btn-default" ng-click="vm.openClientModal(c)">
+                      <span class="glyphicon glyphicon-pencil"></span>
+                    </button>
+                    <button class="btn btn-xs btn-danger" ng-click="vm.deleteClient(c)">
+                      <span class="glyphicon glyphicon-trash"></span>
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ CONTAS A RECEBER ════════════════════════════════ -->
+      <div ng-show="vm.section==='receivable'">
+        <div class="adm-toolbar">
+          <div class="btn-group">
+            <button class="btn btn-default" ng-class="{active: vm.recFilter===''}" ng-click="vm.recFilter=''; vm.loadPayments('receivable')">Todos</button>
+            <button class="btn btn-default" ng-class="{active: vm.recFilter==='active'}" ng-click="vm.recFilter='active'; vm.loadPayments('receivable')">Ativos</button>
+            <button class="btn btn-default" ng-class="{active: vm.recFilter==='completed'}" ng-click="vm.recFilter='completed'; vm.loadPayments('receivable')">Concluídos</button>
+          </div>
+          <button class="btn btn-success" ng-click="vm.openPayModal('receivable')">
+            <span class="glyphicon glyphicon-plus"></span> Nova Cobrança
+          </button>
+        </div>
+
+        <div class="adm-card">
+          <div ng-show="vm.receivable.length===0" class="adm-empty" style="padding:32px">Nenhuma conta a receber.</div>
+          <div class="table-responsive" ng-show="vm.receivable.length>0">
+            <table class="table adm-table">
+              <thead><tr>
+                <th>Descrição</th><th>Cliente</th><th>Valor</th>
+                <th>Vencimento</th><th>Recorrência</th><th>Status</th><th>Ações</th>
+              </tr></thead>
+              <tbody>
+                <tr ng-repeat="s in vm.receivable" ng-class="{'adm-row-alert': vm.isOverdue(s)}">
+                  <td ng-bind="s.description || s.category || '—'"></td>
+                  <td>
+                    <span ng-bind="s.client_name"></span>
+                    <div class="adm-sub" ng-bind="s.client_email"></div>
+                  </td>
+                  <td><strong class="text-success" ng-bind="s.amount | currency:'R$\u00a0':2"></strong></td>
+                  <td>
+                    <span ng-bind="s.due_date | date:'dd/MM/yyyy':'UTC'"></span>
+                    <span class="label label-danger" ng-show="vm.isOverdue(s)"> Vencido</span>
+                  </td>
+                  <td ng-bind="vm.recLbl(s.recurrence)"></td>
+                  <td><span class="label" ng-class="vm.statusCls(s.status)" ng-bind="vm.statusLbl(s.status)"></span></td>
+                  <td class="nowrap">
+                    <button class="btn btn-xs btn-info" ng-show="s.status==='active'" ng-click="vm.executeSchedule(s)" title="Executar cobrança">
+                      <span class="glyphicon glyphicon-play"></span>
+                    </button>
+                    <button class="btn btn-xs btn-default" ng-click="vm.openPayModal('receivable', s)">
+                      <span class="glyphicon glyphicon-pencil"></span>
+                    </button>
+                    <button class="btn btn-xs btn-danger" ng-show="s.status==='active'" ng-click="vm.cancelSchedule(s)">
+                      <span class="glyphicon glyphicon-remove"></span>
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ CONTAS A PAGAR ══════════════════════════════════ -->
+      <div ng-show="vm.section==='payable'">
+        <div class="adm-toolbar">
+          <div class="btn-group">
+            <button class="btn btn-default" ng-class="{active: vm.payFilter===''}" ng-click="vm.payFilter=''; vm.loadPayments('payable')">Todos</button>
+            <button class="btn btn-default" ng-class="{active: vm.payFilter==='active'}" ng-click="vm.payFilter='active'; vm.loadPayments('payable')">Ativos</button>
+            <button class="btn btn-default" ng-class="{active: vm.payFilter==='completed'}" ng-click="vm.payFilter='completed'; vm.loadPayments('payable')">Concluídos</button>
+          </div>
+          <button class="btn btn-danger" ng-click="vm.openPayModal('payable')">
+            <span class="glyphicon glyphicon-plus"></span> Nova Despesa
+          </button>
+        </div>
+
+        <div class="adm-card">
+          <div ng-show="vm.payable.length===0" class="adm-empty" style="padding:32px">Nenhuma conta a pagar.</div>
+          <div class="table-responsive" ng-show="vm.payable.length>0">
+            <table class="table adm-table">
+              <thead><tr>
+                <th>Descrição</th><th>Favorecido</th><th>Valor</th>
+                <th>Vencimento</th><th>Recorrência</th><th>Status</th><th>Ações</th>
+              </tr></thead>
+              <tbody>
+                <tr ng-repeat="s in vm.payable" ng-class="{'adm-row-alert': vm.isOverdue(s)}">
+                  <td ng-bind="s.description || s.category || '—'"></td>
+                  <td ng-bind="s.client_name"></td>
+                  <td><strong class="text-danger" ng-bind="s.amount | currency:'R$\u00a0':2"></strong></td>
+                  <td>
+                    <span ng-bind="s.due_date | date:'dd/MM/yyyy':'UTC'"></span>
+                    <span class="label label-danger" ng-show="vm.isOverdue(s)"> Vencido</span>
+                  </td>
+                  <td ng-bind="vm.recLbl(s.recurrence)"></td>
+                  <td><span class="label" ng-class="vm.statusCls(s.status)" ng-bind="vm.statusLbl(s.status)"></span></td>
+                  <td class="nowrap">
+                    <button class="btn btn-xs btn-success" ng-show="s.status==='active'" ng-click="vm.executeSchedule(s)" title="Marcar como pago">
+                      <span class="glyphicon glyphicon-ok"></span>
+                    </button>
+                    <button class="btn btn-xs btn-default" ng-click="vm.openPayModal('payable', s)">
+                      <span class="glyphicon glyphicon-pencil"></span>
+                    </button>
+                    <button class="btn btn-xs btn-danger" ng-show="s.status==='active'" ng-click="vm.cancelSchedule(s)">
+                      <span class="glyphicon glyphicon-remove"></span>
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ PERFIL / CUSTOMIZAÇÃO ══════════════════════════ -->
+      <div ng-show="vm.section==='profile'">
+
+        <form ng-submit="vm.saveProfile()" novalidate>
+
+          <!-- ── Informações da empresa ─────────────────────── -->
+          <div class="adm-card" style="margin-bottom:20px">
+            <div class="adm-card-header">
+              <span class="glyphicon glyphicon-briefcase"></span> Informações da Empresa
+            </div>
+            <div class="adm-card-body">
+              <div class="row">
+                <div class="col-sm-6">
+                  <div class="form-group">
+                    <label>Nome da Empresa <span class="text-danger">*</span></label>
+                    <input class="form-control" ng-model="vm.pProfile.name"
+                           placeholder="Nome da empresa" required />
+                  </div>
+                </div>
+                <div class="col-sm-6">
+                  <div class="form-group">
+                    <label>Nome do Agente de IA</label>
+                    <input class="form-control" ng-model="vm.pProfile.agent_name"
+                           placeholder="Ex: Sofia, Max, Assistente…" />
+                    <p class="help-block" style="font-size:11px">
+                      Aparece no cabeçalho do chat dos seus clientes.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Mensagem de Boas-vindas</label>
+                <textarea class="form-control" ng-model="vm.pProfile.welcome_message"
+                          rows="2" placeholder="Olá! Como posso ajudar?"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Visual do chat ─────────────────────────────── -->
+          <div class="adm-card" style="margin-bottom:20px">
+            <div class="adm-card-header">
+              <span class="glyphicon glyphicon-eye-open"></span> Visual do Chat
+            </div>
+            <div class="adm-card-body">
+              <div class="row">
+                <div class="col-sm-4">
+                  <div class="form-group">
+                    <label>Cor Principal</label>
+                    <div style="display:flex;gap:8px;align-items:center">
+                      <input type="color" class="sa-color-input"
+                             ng-model="vm.pProfile.primary_color" style="width:44px;height:36px;padding:2px;border:1px solid #e2e8f0;border-radius:6px;cursor:pointer" />
+                      <input type="text" class="form-control" ng-model="vm.pProfile.primary_color"
+                             placeholder="#2563eb" style="flex:1" maxlength="7" />
+                    </div>
+                  </div>
+                </div>
+                <div class="col-sm-8">
+                  <div class="form-group">
+                    <label>URL do Logotipo</label>
+                    <input class="form-control" ng-model="vm.pProfile.logo_url"
+                           placeholder="https://…/logo.png" />
+                    <p class="help-block" style="font-size:11px">Link direto para a imagem do seu logo (PNG, SVG recomendado).</p>
+                  </div>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>URL da Imagem de Fundo do Chat</label>
+                <input class="form-control" ng-model="vm.pProfile.background_url"
+                       placeholder="https://…/background.jpg" />
+                <p class="help-block" style="font-size:11px">Imagem de fundo exibida na tela de chat do cliente. Deixe vazio para usar gradiente da cor principal.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Preview do chat ────────────────────────────── -->
+          <div class="adm-card" style="margin-bottom:20px">
+            <div class="adm-card-header">
+              <span class="glyphicon glyphicon-phone"></span> Preview do Chat
+            </div>
+            <div class="adm-card-body" style="display:flex;justify-content:center;padding:24px">
+              <div class="profile-preview-chat"
+                   ng-style="{'background-image': vm.pProfile.background_url ? 'url('+vm.pProfile.background_url+')' : 'none',
+                              'background-color': !vm.pProfile.background_url ? (vm.pProfile.primary_color || '#2563eb') + '22' : 'transparent',
+                              'background-size':'cover','background-position':'center'}">
+                <!-- Header do chat -->
+                <div class="profile-preview-header"
+                     ng-style="{'background-color': vm.pProfile.primary_color || '#2563eb'}">
+                  <img ng-if="vm.pProfile.logo_url" ng-src="{{vm.pProfile.logo_url}}"
+                       style="width:28px;height:28px;border-radius:50%;object-fit:cover;margin-right:8px" />
+                  <span ng-if="!vm.pProfile.logo_url" class="glyphicon glyphicon-comment"
+                        style="margin-right:8px;font-size:16px;color:#fff"></span>
+                  <div>
+                    <div style="font-weight:600;font-size:13px;color:#fff" ng-bind="vm.pProfile.agent_name || 'Assistente'"></div>
+                    <div style="font-size:10px;color:rgba(255,255,255,.75)">● Online</div>
+                  </div>
+                </div>
+                <!-- Bolha de boas-vindas -->
+                <div style="padding:12px 10px">
+                  <div class="profile-preview-bubble"
+                       ng-style="{'background': vm.pProfile.primary_color || '#2563eb'}">
+                    <span ng-bind="vm.pProfile.welcome_message || 'Olá! Como posso ajudar?'"></span>
+                  </div>
+                  <div class="profile-preview-bubble profile-preview-client">
+                    Olá, tenho uma dúvida!
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── URL pública do chat ─────────────────────────── -->
+          <div class="adm-card" style="margin-bottom:20px">
+            <div class="adm-card-header">
+              <span class="glyphicon glyphicon-link"></span> URL do seu Chat
+            </div>
+            <div class="adm-card-body">
+              <div class="profile-url-box">
+                <span class="glyphicon glyphicon-globe" style="color:#2563eb;margin-right:8px"></span>
+                <a ng-href="{{vm.chatPublicUrl()}}" target="_blank" ng-bind="vm.chatPublicUrl()"></a>
+                <button type="button" class="btn btn-xs btn-default" style="margin-left:10px"
+                        ng-click="vm.copyChatUrl()" title="Copiar link">
+                  <span class="glyphicon glyphicon-copy"></span> Copiar
+                </button>
+              </div>
+              <p class="help-block" style="font-size:12px;margin-top:8px">
+                Compartilhe este link com seus clientes para que eles acessem o chat do seu agente.
+              </p>
+            </div>
+          </div>
+
+          <!-- ── Botão salvar ───────────────────────────────── -->
+          <div style="text-align:right;margin-bottom:32px">
+            <button type="submit" class="btn btn-primary btn-lg" ng-disabled="vm.savingProfile">
+              <span class="glyphicon"
+                    ng-class="vm.savingProfile ? 'glyphicon-refresh adm-spin' : 'glyphicon-floppy-disk'"></span>
+              {{vm.savingProfile ? 'Salvando…' : 'Salvar Alterações'}}
+            </button>
+          </div>
+
+        </form>
+      </div>
+
+    </div><!-- /adm-content -->
+  </div><!-- /adm-main -->
+
+  <!-- ══ MODAL: CLIENTE ═══════════════════════════════════════ -->
+  <div class="adm-modal-bg" ng-show="vm.modals.client" ng-click="vm.modals.client=false"></div>
+  <div class="adm-modal" ng-show="vm.modals.client">
+    <div class="adm-modal-box">
+      <div class="adm-modal-head">
+        <span ng-bind="vm.cForm.id ? 'Editar Cliente' : 'Novo Cliente'"></span>
+        <button class="adm-modal-close" ng-click="vm.modals.client=false">&times;</button>
+      </div>
+      <div class="adm-modal-body">
+        <div class="row">
+          <div class="col-sm-6">
+            <div class="form-group">
+              <label>Nome <span class="text-danger">*</span></label>
+              <input class="form-control" ng-model="vm.cForm.name" placeholder="Nome completo" required />
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <div class="form-group">
+              <label>E-mail</label>
+              <input type="email" class="form-control" ng-model="vm.cForm.email" placeholder="email@exemplo.com" />
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col-sm-6">
+            <div class="form-group">
+              <label>Telefone</label>
+              <input class="form-control" ng-model="vm.cForm.phone" placeholder="(11) 99999-9999" />
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <div class="form-group">
+              <label>CPF / CNPJ</label>
+              <input class="form-control" ng-model="vm.cForm.document" placeholder="000.000.000-00" />
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Endereço</label>
+          <input class="form-control" ng-model="vm.cForm.address" placeholder="Rua, número, cidade" />
+        </div>
+        <div class="form-group">
+          <label>Observações</label>
+          <textarea class="form-control" ng-model="vm.cForm.notes" rows="2"></textarea>
+        </div>
+        <div class="form-group">
+          <label><input type="checkbox" ng-model="vm.cForm.is_active" /> Ativo</label>
+        </div>
+      </div>
+      <div class="adm-modal-foot">
+        <button class="btn btn-default" ng-click="vm.modals.client=false">Cancelar</button>
+        <button class="btn btn-primary" ng-click="vm.saveClient()" ng-disabled="vm.saving">
+          <span class="glyphicon" ng-class="vm.saving?'glyphicon-refresh adm-spin':'glyphicon-floppy-disk'"></span>
+          {{vm.saving ? 'Salvando…' : 'Salvar'}}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL: PAGAMENTO ═════════════════════════════════════ -->
+  <div class="adm-modal-bg" ng-show="vm.modals.pay" ng-click="vm.modals.pay=false"></div>
+  <div class="adm-modal" ng-show="vm.modals.pay">
+    <div class="adm-modal-box adm-modal-lg">
+      <div class="adm-modal-head"
+           ng-class="vm.pForm.type==='receivable'?'adm-modal-head-green':'adm-modal-head-red'">
+        <span>
+          <span class="glyphicon" ng-class="vm.pForm.type==='receivable'?'glyphicon-arrow-down':'glyphicon-arrow-up'"></span>
+          {{vm.pForm.type==='receivable' ? (vm.pForm.id ? 'Editar Cobrança' : 'Nova Cobrança a Receber') : (vm.pForm.id ? 'Editar Despesa' : 'Nova Conta a Pagar')}}
+        </span>
+        <button class="adm-modal-close" ng-click="vm.modals.pay=false">&times;</button>
+      </div>
+      <div class="adm-modal-body">
+
+        <!-- ── Busca com autocomplete ─────────────────────────── -->
+        <div class="form-group">
+          <label>
+            <span class="glyphicon glyphicon-search" style="margin-right:4px"></span>
+            {{vm.pForm.type==='receivable' ? 'Buscar cliente cadastrado' : 'Buscar favorecido / fornecedor'}}
+          </label>
+          <div class="ac-wrap">
+            <input class="form-control" type="text"
+                   ng-model="vm.clientQuery"
+                   ng-change="vm.onClientQueryChange()"
+                   ng-blur="vm.closeAc()"
+                   placeholder="Digite nome, e-mail ou telefone…"
+                   autocomplete="off" />
+            <ul class="ac-dropdown" ng-show="vm.showAc">
+              <li ng-repeat="c in vm.acList" ng-mousedown="vm.selectAcClient(c)">
+                <span class="ac-name" ng-bind="c.name"></span>
+                <span class="ac-sub">
+                  <span ng-bind="c.email"></span>
+                  <span ng-show="c.email && c.phone"> · </span>
+                  <span ng-bind="c.phone"></span>
+                </span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- ── Dados do cliente (auto-preenchidos ou manuais) ─── -->
+        <div class="row">
+          <div class="col-sm-4">
+            <div class="form-group">
+              <label>{{vm.pForm.type==='receivable' ? 'Nome do Cliente' : 'Favorecido / Fornecedor'}} <span class="text-danger">*</span></label>
+              <input class="form-control" ng-model="vm.pForm.client_name" placeholder="Nome completo" required />
+            </div>
+          </div>
+          <div class="col-sm-4" ng-show="vm.pForm.type==='receivable'">
+            <div class="form-group">
+              <label>E-mail do Cliente</label>
+              <input type="email" class="form-control" ng-model="vm.pForm.client_email" placeholder="email@cliente.com" />
+            </div>
+          </div>
+          <div class="col-sm-4" ng-show="vm.pForm.type==='payable'">
+            <div class="form-group">
+              <label>Categoria</label>
+              <input class="form-control" ng-model="vm.pForm.category" placeholder="Ex: Aluguel, Fornecedor…" />
+            </div>
+          </div>
+          <div class="col-sm-4">
+            <div class="form-group">
+              <label>Telefone do Cliente</label>
+              <input class="form-control" ng-model="vm.pForm.client_phone" placeholder="(11) 99999-9999" />
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Checkbox: cobrança recorrente ──────────────────── -->
+        <div class="form-group">
+          <label class="recurring-badge">
+            <input type="checkbox" ng-model="vm.pForm.is_recurring" />
+            <span class="glyphicon glyphicon-repeat" style="font-size:13px"></span>
+            Cobrança recorrente mensal
+          </label>
+          <div class="recurring-hint" ng-show="vm.pForm.is_recurring">
+            A primeira cobrança será gerada para o próximo vencimento do dia informado.
+          </div>
+        </div>
+
+        <!-- ── Valor + Vencimento (ou dia) ────────────────────── -->
+        <div class="row">
+          <div class="col-sm-4">
+            <div class="form-group">
+              <label>Valor (R$) <span class="text-danger">*</span></label>
+              <input type="number" step="0.01" min="0.01" class="form-control"
+                     ng-model="vm.pForm.amount" placeholder="0,00" required />
+            </div>
+          </div>
+
+          <!-- Data completa (se NÃO recorrente) -->
+          <div class="col-sm-4" ng-show="!vm.pForm.is_recurring">
+            <div class="form-group">
+              <label>Vencimento <span class="text-danger">*</span></label>
+              <input type="date" class="form-control" ng-model="vm.pForm.due_date" required />
+            </div>
+          </div>
+
+          <!-- Apenas o dia (se recorrente) -->
+          <div class="col-sm-4" ng-show="vm.pForm.is_recurring">
+            <div class="form-group">
+              <label>Dia do mês (1–31) <span class="text-danger">*</span></label>
+              <input type="number" min="1" max="31" class="form-control"
+                     ng-model="vm.pForm.recurring_day"
+                     placeholder="Ex: 10" />
+            </div>
+          </div>
+
+          <div class="col-sm-4" ng-show="!vm.pForm.is_recurring">
+            <div class="form-group">
+              <label>Recorrência</label>
+              <select class="form-control" ng-model="vm.pForm.recurrence">
+                <option value="once">Único</option>
+                <option value="weekly">Semanal</option>
+                <option value="monthly">Mensal</option>
+                <option value="yearly">Anual</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Forma de pagamento + Descrição ─────────────────── -->
+        <div class="row">
+          <div class="col-sm-6" ng-show="vm.pForm.type==='receivable'">
+            <div class="form-group">
+              <label>Forma de Pagamento</label>
+              <select class="form-control" ng-model="vm.pForm.payment_method">
+                <option value="pix">PIX</option>
+                <option value="boleto">Boleto</option>
+                <option value="credit_card">Cartão de Crédito</option>
+                <option value="debit">Débito</option>
+              </select>
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <div class="form-group">
+              <label>Descrição</label>
+              <input class="form-control" ng-model="vm.pForm.description" placeholder="Descreva brevemente…" />
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Observações</label>
+          <textarea class="form-control" ng-model="vm.pForm.notes" rows="2"></textarea>
+        </div>
+
+      </div>
+      <div class="adm-modal-foot">
+        <button class="btn btn-default" ng-click="vm.modals.pay=false">Cancelar</button>
+        <button class="btn" ng-class="vm.pForm.type==='receivable'?'btn-success':'btn-danger'"
+                ng-click="vm.savePay()" ng-disabled="vm.saving">
+          <span class="glyphicon" ng-class="vm.saving?'glyphicon-refresh adm-spin':'glyphicon-floppy-disk'"></span>
+          {{vm.saving ? 'Salvando…' : 'Salvar'}}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TOAST ════════════════════════════════════════════════ -->
+  <div class="adm-toast" ng-show="vm.toast.visible" ng-class="'adm-toast-'+vm.toast.type">
+    <span class="glyphicon" ng-class="{'glyphicon-ok':vm.toast.type==='success','glyphicon-alert':vm.toast.type==='error','glyphicon-info-sign':vm.toast.type==='info'}"></span>
+    <span ng-bind="vm.toast.msg"></span>
+  </div>
+
+  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.3/angular.min.js"></script>
+  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.3/angular-sanitize.min.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>

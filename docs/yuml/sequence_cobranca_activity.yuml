@@ -1,0 +1,24 @@
+[Agendador]->[Disparar cobrança para agendamento X]
+[Disparador]->[Disparar cobrança para agendamento X]
+[Disparar cobrança para agendamento X]->[Orquestrador de Pagamentos cria Transacao (pendente)]
+[Orquestrador de Pagamentos cria Transacao (pendente)]->[Enviar requisição ao PSP]
+[Enviar requisição ao PSP]->[Receber resposta do PSP (sucesso|falha)]
+[Receber resposta do PSP (sucesso|falha)]->[Atualizar Transacao]
+[Atualizar Transacao]->[Se sucesso: Marcar Fatura como PAGA]
+[Atualizar Transacao]->[Se falha: Executar política de tentativas]
+[Se falha: Executar política de tentativas]->[Se falha persistente: Criar ticket para Operador Financeiro]
+
+// Adicionado: notificação automática ao cliente no vencimento e após tentativa de cobrança
+[Disparador]->[Notificar cliente sobre cobrança (vencimento)]
+[Se sucesso: Marcar Fatura como PAGA]->[Notificar cliente sobre pagamento realizado]
+[Se falha: Executar política de tentativas]->[Notificar cliente sobre falha de cobrança]
+[Agendador]->[Disparar cobrança para agendamento X]
+[Disparar cobrança para agendamento X]->[Orquestrador de Pagamentos cria Transacao (pendente)]
+[Orquestrador de Pagamentos cria Transacao (pendente)]->[Enviar requisição ao PSP]
+[Enviar requisição ao PSP]->[Receber resposta do PSP (sucesso|falha)]
+[Receber resposta do PSP (sucesso|falha)]->[Atualizar Transacao]
+[Atualizar Transacao]->[Se sucesso: Marcar Fatura como PAGA]
+[Atualizar Transacao]->[Se falha: Executar política de tentativas]
+[Se falha: Executar política de tentativas]->[Se falha persistente: Criar ticket para Operador Financeiro]
+
+// yUML não suporta diagramas de sequência tradicionais; este é um fluxo de atividade simplificado.

@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="pt-br" ng-app="mafelRegister">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Cadastre-se · Mafel Organizer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css"/>
+  <link rel="stylesheet" href="css/register.css"/>
+</head>
+
+<body ng-controller="RegisterCtrl as vm">
+
+  <div class="reg-wrapper">
+
+    <!-- ════════════ CARTÃO PRINCIPAL ════════════ -->
+    <div class="reg-card">
+
+      <!-- ── Logo / Brand ── -->
+      <div class="reg-header">
+        <div class="reg-logo">
+          <span class="glyphicon glyphicon-briefcase"></span>
+        </div>
+        <h1>Mafel Organizer</h1>
+        <p class="reg-subtitle">Crie sua conta de prestador</p>
+      </div>
+
+      <!-- ── Progress Bar ── -->
+      <div class="reg-progress" ng-if="vm.step < 4">
+        <div class="progress-steps">
+          <div class="ps-item" ng-class="{'active': vm.step >= 1, 'done': vm.step > 1}">
+            <div class="ps-circle">
+              <span ng-if="vm.step <= 1">1</span>
+              <span ng-if="vm.step > 1" class="glyphicon glyphicon-ok"></span>
+            </div>
+            <span class="ps-label">Dados</span>
+          </div>
+          <div class="ps-line"></div>
+          <div class="ps-item" ng-class="{'active': vm.step >= 2, 'done': vm.step > 2}">
+            <div class="ps-circle">
+              <span ng-if="vm.step <= 2">2</span>
+              <span ng-if="vm.step > 2" class="glyphicon glyphicon-ok"></span>
+            </div>
+            <span class="ps-label">Empresa</span>
+          </div>
+          <div class="ps-line"></div>
+          <div class="ps-item" ng-class="{'active': vm.step >= 3, 'done': vm.step > 3}">
+            <div class="ps-circle">
+              <span ng-if="vm.step <= 3">3</span>
+              <span ng-if="vm.step > 3" class="glyphicon glyphicon-ok"></span>
+            </div>
+            <span class="ps-label">Plano</span>
+          </div>
+          <div class="ps-line"></div>
+          <div class="ps-item" ng-class="{'active': vm.step >= 4}">
+            <div class="ps-circle">4</div>
+            <span class="ps-label">Pagar</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Alerta de Erro ── -->
+      <div class="alert-error" ng-if="vm.error">
+        <span class="glyphicon glyphicon-exclamation-sign"></span>
+        {{ vm.error }}
+      </div>
+
+      <!-- ════ STEP 1 ── Dados Pessoais ════ -->
+      <div class="reg-body" ng-if="vm.step === 1">
+        <h2 class="step-title">Seus dados</h2>
+
+        <div class="form-group">
+          <label>Nome completo <span class="req">*</span></label>
+          <div class="input-wrap">
+            <span class="glyphicon glyphicon-user input-icon"></span>
+            <input type="text" ng-model="vm.form.name"
+                   placeholder="João da Silva" autofocus autocomplete="name"/>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>E-mail <span class="req">*</span></label>
+          <div class="input-wrap">
+            <span class="glyphicon glyphicon-envelope input-icon"></span>
+            <input type="email" ng-model="vm.form.email"
+                   placeholder="seu@email.com" autocomplete="email"/>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Celular <small>(opcional)</small></label>
+          <div class="input-wrap">
+            <span class="glyphicon glyphicon-phone input-icon"></span>
+            <input type="tel" ng-model="vm.form.phone"
+                   placeholder="(11) 99999-0000" autocomplete="tel"/>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Senha <span class="req">*</span></label>
+          <div class="input-wrap">
+            <span class="glyphicon glyphicon-lock input-icon"></span>
+            <input ng-attr-type="{{ vm.showPwd ? 'text' : 'password' }}"
+                   ng-model="vm.form.password"
+                   placeholder="Mínimo 6 caracteres" autocomplete="new-password"/>
+            <button type="button" class="toggle-pwd" ng-click="vm.showPwd = !vm.showPwd" tabindex="-1">
+              <span class="glyphicon"
+                    ng-class="vm.showPwd ? 'glyphicon-eye-close' : 'glyphicon-eye-open'"></span>
+            </button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Confirmar senha <span class="req">*</span></label>
+          <div class="input-wrap">
+            <span class="glyphicon glyphicon-lock input-icon"></span>
+            <input ng-attr-type="{{ vm.showPwd ? 'text' : 'password' }}"
+                   ng-model="vm.form.password_confirm"
+                   placeholder="Repita a senha" autocomplete="new-password"/>
+          </div>
+          <small class="hint-error"
+                 ng-if="vm.form.password && vm.form.password_confirm && vm.form.password !== vm.form.password_confirm">
+            As senhas não coincidem.
+          </small>
+        </div>
+
+        <button class="btn-primary-full" ng-click="vm.nextStep1()"
+                ng-disabled="!vm.form.name || !vm.form.email || !vm.form.password || vm.form.password !== vm.form.password_confirm">
+          Continuar <span class="glyphicon glyphicon-chevron-right"></span>
+        </button>
+
+        <p class="login-link">
+          Já tem conta? <a href="login.html">Faça login</a>
+        </p>
+      </div>
+
+      <!-- ════ STEP 2 ── Dados da Empresa ════ -->
+      <div class="reg-body" ng-if="vm.step === 2">
+        <h2 class="step-title">Sua empresa</h2>
+
+        <div class="form-group">
+          <label>Nome do negócio / clínica <span class="req">*</span></label>
+          <div class="input-wrap">
+            <span class="glyphicon glyphicon-home input-icon"></span>
+            <input type="text" ng-model="vm.form.business_name"
+                   ng-change="vm.autoSlug()"
+                   placeholder="Clínica ABC, Academia XYZ…" autofocus/>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Endereço no sistema <small>(gerado automaticamente)</small></label>
+          <div class="slug-preview">
+            <span class="slug-base">mafelorganizer.com/<strong>{{ vm.form.business_slug || '...' }}</strong></span>
+          </div>
+          <div class="input-wrap" style="margin-top:6px">
+            <span class="glyphicon glyphicon-link input-icon"></span>
+            <input type="text" ng-model="vm.form.business_slug"
+                   placeholder="minha-clinica" style="text-transform:lowercase"
+                   ng-change="vm.form.business_slug = vm.sanitizeSlug(vm.form.business_slug)"/>
+          </div>
+          <small class="hint">Letras minúsculas, números e hífens. Pode alterar.</small>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn-back" ng-click="vm.step = 1">
+            <span class="glyphicon glyphicon-chevron-left"></span> Voltar
+          </button>
+          <button class="btn-primary-full flex-grow" ng-click="vm.nextStep2()"
+                  ng-disabled="!vm.form.business_name">
+            Continuar <span class="glyphicon glyphicon-chevron-right"></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ════ STEP 3 ── Escolha do Plano ════ -->
+      <div class="reg-body" ng-if="vm.step === 3">
+        <h2 class="step-title">Escolha seu plano</h2>
+
+        <!-- Card Mensal -->
+        <div class="plan-card" ng-class="{'plan-selected': vm.form.plan === 'monthly'}"
+             ng-click="vm.form.plan = 'monthly'">
+          <div class="plan-radio">
+            <span class="glyphicon" ng-class="vm.form.plan === 'monthly' ? 'glyphicon-record' : 'glyphicon-circle-arrow-right'"></span>
+          </div>
+          <div class="plan-info">
+            <div class="plan-name">Plano Mensal</div>
+            <div class="plan-price">
+              <span class="price-currency">R$</span>
+              <span class="price-value">59</span>
+              <span class="price-cents">,90</span>
+              <span class="price-period">/mês</span>
+            </div>
+            <div class="plan-detail">Renovação automática a cada 30 dias</div>
+          </div>
+        </div>
+
+        <!-- Card Anual (destaque) -->
+        <div class="plan-card plan-annual" ng-class="{'plan-selected': vm.form.plan === 'annual'}"
+             ng-click="vm.form.plan = 'annual'">
+          <div class="plan-badge">🎉 Economize R$119,90</div>
+          <div class="plan-radio">
+            <span class="glyphicon" ng-class="vm.form.plan === 'annual' ? 'glyphicon-record' : 'glyphicon-circle-arrow-right'"></span>
+          </div>
+          <div class="plan-info">
+            <div class="plan-name">Plano Anual</div>
+            <div class="plan-price">
+              <span class="price-currency">R$</span>
+              <span class="price-value">599</span>
+              <span class="price-cents">,90</span>
+              <span class="price-period">/ano</span>
+            </div>
+            <div class="plan-equiv">Equivale a <strong>R$ 49,99/mês</strong> — 17% off</div>
+            <div class="plan-detail">Válido por 365 dias. Sem renovação automática.</div>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn-back" ng-click="vm.step = 2">
+            <span class="glyphicon glyphicon-chevron-left"></span> Voltar
+          </button>
+          <button class="btn-primary-full flex-grow" ng-click="vm.submitRegister()"
+                  ng-disabled="!vm.form.plan || vm.loading">
+            <span ng-if="vm.loading">
+              <span class="spinner-inline"></span> Gerando PIX…
+            </span>
+            <span ng-if="!vm.loading">
+              Gerar PIX <span class="glyphicon glyphicon-qrcode"></span>
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ════ STEP 4 ── Pagamento PIX ════ -->
+      <div class="reg-body" ng-if="vm.step === 4">
+
+        <!-- aguardando pagamento -->
+        <div ng-if="!vm.paymentConfirmed">
+          <h2 class="step-title">Pague via PIX</h2>
+
+          <div class="pix-amount-badge">
+            R$ {{ vm.pixData.amount | number:2 }} — {{ vm.pixData.plan_label }}
+          </div>
+
+          <!-- QR Code -->
+          <div class="pix-qr-wrap" ng-if="vm.pixData.pix_qr_base64">
+            <img ng-src="data:image/png;base64,{{ vm.pixData.pix_qr_base64 }}"
+                 alt="QR Code PIX" class="pix-qr-img"/>
+          </div>
+
+          <div class="pix-no-qr" ng-if="!vm.pixData.pix_qr_base64">
+            <span class="glyphicon glyphicon-info-sign"></span>
+            QR Code não disponível — use o código copia e cola abaixo.
+          </div>
+
+          <!-- Copia e Cola -->
+          <div class="pix-copy-section" ng-if="vm.pixData.pix_code">
+            <label>Código PIX (Copia e Cola)</label>
+            <div class="pix-code-box">
+              <span class="pix-code-text">{{ vm.pixData.pix_code }}</span>
+              <button class="btn-copy" ng-click="vm.copyPix()" title="Copiar código">
+                <span class="glyphicon" ng-class="vm.copied ? 'glyphicon-ok' : 'glyphicon-copy'"></span>
+                {{ vm.copied ? 'Copiado!' : 'Copiar' }}
+              </button>
+            </div>
+          </div>
+
+          <div class="pix-no-qr" ng-if="!vm.pixData.pix_code && !vm.pixData.pix_qr_base64">
+            <span class="glyphicon glyphicon-warning-sign"></span>
+            Não foi possível gerar o PIX (verifique o token do Mercado Pago no servidor).
+            Entre em contato com o suporte.
+          </div>
+
+          <!-- Expiração -->
+          <div class="pix-expiry" ng-if="vm.pixData.pix_expires_at">
+            <span class="glyphicon glyphicon-time"></span>
+            QR Code válido até {{ vm.pixData.pix_expires_at | date:'HH:mm' }} de hoje.
+          </div>
+
+          <!-- Status polling -->
+          <div class="pix-status-row">
+            <div class="spinner-pix" ng-if="vm.polling"></div>
+            <span ng-if="vm.polling">Verificando pagamento…</span>
+            <span ng-if="!vm.polling && !vm.paymentConfirmed" class="pix-hint">
+              Após pagar, a confirmação ocorre em segundos.
+            </span>
+          </div>
+        </div>
+
+        <!-- ✅ Pagamento confirmado -->
+        <div class="pix-success" ng-if="vm.paymentConfirmed">
+          <div class="success-icon">✅</div>
+          <h2>Pagamento confirmado!</h2>
+          <p>Sua conta está ativa. Bem-vindo ao Mafel Organizer!</p>
+          <a class="btn-primary-full" href="login.html">
+            <span class="glyphicon glyphicon-log-in"></span> Fazer login agora
+          </a>
+        </div>
+
+      </div>
+      <!-- /step 4 -->
+
+      <!-- ── Footer ── -->
+      <div class="reg-footer">
+        Mafel Organizer &copy; 2026
+      </div>
+
+    </div><!-- /.reg-card -->
+  </div><!-- /.reg-wrapper -->
+
+  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.3/angular.min.js"></script>
+  <script>
+  (function () {
+    'use strict';
+
+    angular
+      .module('mafelRegister', [])
+      .filter('number', function () {
+        return function (input, decimals) {
+          if (isNaN(input)) return input;
+          return parseFloat(input).toFixed(decimals || 0)
+            .replace('.', ',')
+            .replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        };
+      })
+      .controller('RegisterCtrl', ['$http', '$window', '$interval', function ($http, $window, $interval) {
+        var vm = this;
+
+        vm.step    = 1;
+        vm.loading = false;
+        vm.error   = null;
+        vm.showPwd = false;
+        vm.copied  = false;
+        vm.polling = false;
+        vm.paymentConfirmed = false;
+
+        vm.form = {
+          name:            '',
+          email:           '',
+          phone:           '',
+          password:        '',
+          password_confirm:'',
+          business_name:   '',
+          business_slug:   '',
+          plan:            'monthly',
+        };
+
+        vm.pixData = null;
+        var pollInterval = null;
+
+        // ─── Slugify auxiliar ────────────────────────────
+        function toSlug(str) {
+          return (str || '')
+            .toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9\s-]/g, '')
+            .trim()
+            .replace(/\s+/g, '-')
+            .replace(/-+/g, '-')
+            .substring(0, 50);
+        }
+
+        vm.sanitizeSlug = function (s) { return toSlug(s); };
+
+        vm.autoSlug = function () {
+          vm.form.business_slug = toSlug(vm.form.business_name);
+        };
+
+        // ─── Step 1: validação ───────────────────────────
+        vm.nextStep1 = function () {
+          vm.error = null;
+          if (!vm.form.name || !vm.form.email || !vm.form.password) {
+            return (vm.error = 'Preencha todos os campos obrigatórios.');
+          }
+          if (vm.form.password !== vm.form.password_confirm) {
+            return (vm.error = 'As senhas não coincidem.');
+          }
+          if (vm.form.password.length < 6) {
+            return (vm.error = 'A senha deve ter pelo menos 6 caracteres.');
+          }
+          vm.step = 2;
+        };
+
+        // ─── Step 2: validação ───────────────────────────
+        vm.nextStep2 = function () {
+          vm.error = null;
+          if (!vm.form.business_name) {
+            return (vm.error = 'Informe o nome do negócio.');
+          }
+          if (!vm.form.business_slug) {
+            vm.autoSlug();
+          }
+          vm.step = 3;
+        };
+
+        // ─── Step 3: enviar cadastro ─────────────────────
+        vm.submitRegister = function () {
+          if (vm.loading) return;
+          vm.error   = null;
+          vm.loading = true;
+
+          var phone = (vm.form.phone || '').replace(/\D/g, '');
+
+          $http.post('/api/subscriptions/initiate', {
+            name:          vm.form.name.trim(),
+            email:         vm.form.email.toLowerCase().trim(),
+            phone:         phone || undefined,
+            password:      vm.form.password,
+            business_name: vm.form.business_name.trim(),
+            business_slug: vm.form.business_slug || undefined,
+            plan:          vm.form.plan,
+          })
+          .then(function (res) {
+            vm.pixData = res.data;
+            vm.step    = 4;
+            vm.loading = false;
+            vm.startPolling(res.data.mp_payment_id);
+          })
+          .catch(function (err) {
+            vm.error   = (err.data && err.data.error) ? err.data.error : 'Erro ao criar cadastro. Tente novamente.';
+            vm.loading = false;
+          });
+        };
+
+        // ─── Polling de status do PIX ────────────────────
+        vm.startPolling = function (mpPaymentId) {
+          if (!mpPaymentId) return;
+          vm.polling = true;
+
+          pollInterval = $interval(function () {
+            $http.get('/api/subscriptions/check/' + mpPaymentId)
+              .then(function (res) {
+                if (res.data.active) {
+                  vm.polling = false;
+                  vm.paymentConfirmed = true;
+                  $interval.cancel(pollInterval);
+                }
+              })
+              .catch(angular.noop);
+          }, 5000); // a cada 5 segundos
+        };
+
+        // ─── Copiar código PIX ───────────────────────────
+        vm.copyPix = function () {
+          if (!vm.pixData || !vm.pixData.pix_code) return;
+          if ($window.navigator.clipboard) {
+            $window.navigator.clipboard.writeText(vm.pixData.pix_code)
+              .then(function () { vm.copied = true; setTimeout(function () { vm.copied = false; }, 3000); });
+          } else {
+            var el = document.createElement('textarea');
+            el.value = vm.pixData.pix_code;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+            vm.copied = true;
+            setTimeout(function () { vm.copied = false; }, 3000);
+          }
+        };
+
+        // Limpa interval ao destruir controller
+        var scope = angular.element(document.body).scope();
+        // (cleanup handled by $interval cancellation above)
+      }]);
+  })();
+  </script>
+</body>
+</html>

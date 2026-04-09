@@ -1,0 +1,301 @@
+/* ============================================================
+   login.css — Telas de Login · Mafel
+   ============================================================ */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: 'Inter', sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%);
+  background-size: 200% 200%;
+  animation: gradientShift 10s ease infinite;
+}
+
+/* Tema roxo para superadmin */
+body.superadmin-theme {
+  background: linear-gradient(135deg, #1e0a3c 0%, #4c1d95 50%, #1e0a3c 100%);
+}
+
+@keyframes gradientShift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* ── Card central ────────────────────────────── */
+.login-wrapper {
+  width: 100%;
+  max-width: 420px;
+  padding: 24px 16px;
+}
+
+.login-card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 25px 60px rgba(0,0,0,.4);
+  overflow: hidden;
+}
+
+/* ── Header colorido ─────────────────────────── */
+.login-header {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  padding: 36px 32px 28px;
+  text-align: center;
+  color: #fff;
+}
+
+.superadmin-theme .login-header {
+  background: linear-gradient(135deg, #7c3aed, #5b21b6);
+}
+
+.login-header .logo-icon {
+  width: 64px;
+  height: 64px;
+  background: rgba(255,255,255,.15);
+  border-radius: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.login-header .logo-icon .glyphicon {
+  font-size: 32px;
+  color: #fff;
+}
+
+.login-header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 4px;
+  letter-spacing: -.3px;
+}
+
+.login-header p {
+  font-size: 13px;
+  margin: 0;
+  opacity: .8;
+}
+
+.badge-superadmin {
+  display: inline-block;
+  background: rgba(255,255,255,.2);
+  border: 1px solid rgba(255,255,255,.35);
+  border-radius: 20px;
+  padding: 3px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  margin-top: 8px;
+}
+
+/* ── Formulário ──────────────────────────────── */
+.login-body {
+  padding: 32px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+.input-group-login {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-group-login .input-icon {
+  position: absolute;
+  left: 12px;
+  color: #9ca3af;
+  font-size: 15px;
+  pointer-events: none;
+}
+
+.input-group-login input {
+  width: 100%;
+  padding: 11px 12px 11px 38px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  font-size: 14px;
+  color: #111827;
+  background: #f9fafb;
+  outline: none;
+  transition: border-color .2s, box-shadow .2s, background .2s;
+  font-family: inherit;
+}
+
+.input-group-login input:focus {
+  border-color: #2563eb;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+}
+
+.superadmin-theme .input-group-login input:focus {
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 3px rgba(124,58,237,.12);
+}
+
+.input-group-login .toggle-pwd {
+  position: absolute;
+  right: 12px;
+  cursor: pointer;
+  color: #9ca3af;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+  transition: color .2s;
+}
+.input-group-login .toggle-pwd:hover { color: #374151; }
+
+/* ── Botão principal ─────────────────────────── */
+.btn-login {
+  width: 100%;
+  padding: 13px;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  cursor: pointer;
+  transition: transform .15s, box-shadow .2s, opacity .2s;
+  letter-spacing: .2px;
+  margin-top: 4px;
+  font-family: inherit;
+}
+
+.superadmin-theme .btn-login {
+  background: linear-gradient(135deg, #7c3aed, #5b21b6);
+}
+
+.btn-login:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(37,99,235,.35);
+}
+
+.superadmin-theme .btn-login:hover:not(:disabled) {
+  box-shadow: 0 6px 20px rgba(124,58,237,.35);
+}
+
+.btn-login:active:not(:disabled) { transform: translateY(0); }
+
+.btn-login:disabled {
+  opacity: .65;
+  cursor: not-allowed;
+}
+
+.btn-login .glyphicon {
+  margin-right: 6px;
+}
+
+/* ── Alerta de erro ──────────────────────────── */
+.alert-login {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13px;
+  margin-bottom: 20px;
+  animation: fadeIn .25s ease;
+}
+
+.alert-login .glyphicon { font-size: 14px; margin-top: 1px; flex-shrink: 0; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Rodapé do card ──────────────────────────── */
+.login-footer {
+  text-align: center;
+  padding: 0 32px 28px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.login-footer a {
+  font-weight: 600;
+  text-decoration: none;
+  color: #2563eb;
+  transition: color .2s;
+}
+
+.login-footer a:hover { color: #1d4ed8; }
+
+.superadmin-theme .login-footer a { color: #7c3aed; }
+.superadmin-theme .login-footer a:hover { color: #5b21b6; }
+
+/* ── Spinner inline ──────────────────────────── */
+.spinner-inline {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Versão info ─────────────────────────────── */
+.version-tag {
+  text-align: center;
+  margin-top: 16px;
+  font-size: 11px;
+  color: rgba(255,255,255,.4);
+  letter-spacing: .3px;
+}
+
+/* ── CTA Cadastre-se ─────────────────────────── */
+.login-register-cta {
+  background: #f0f9ff;
+  border-top: 1px solid #e0f2fe;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #64748b;
+}
+.btn-register-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #fff !important;
+  text-decoration: none !important;
+  padding: 7px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: opacity .2s, transform .1s;
+}
+.btn-register-link:hover { opacity: .9; transform: translateY(-1px); }

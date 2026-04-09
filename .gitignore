@@ -1,0 +1,28 @@
+# ── Dependências ────────────────────────────────────────────────
+node_modules/
+
+# ── Variáveis de ambiente (NUNCA commitar credenciais reais) ────
+.env
+.env.local
+.env.production
+.env.*.local
+
+# ── Uploads gerados em runtime ──────────────────────────────────
+uploads/kb/*
+!uploads/kb/.gitkeep
+
+# ── Logs ────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# ── Builds ──────────────────────────────────────────────────────
+dist/
+build/
+
+# ── SO e editores ───────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/settings.json
+*.swp
+*.swo

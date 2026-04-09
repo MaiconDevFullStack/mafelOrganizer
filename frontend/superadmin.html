@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html ng-app="mafelSuperAdmin" lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Super Admin · Mafel</title>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/admin.css" />
+  <link rel="stylesheet" href="css/superadmin.css" />
+</head>
+<body ng-controller="SuperAdminController as vm">
+
+  <div class="adm-overlay" ng-class="{open: vm.sidebarOpen}" ng-click="vm.sidebarOpen=false"></div>
+
+  <!-- ══ SIDEBAR ══════════════════════════════════════════════ -->
+  <aside class="adm-sidebar sa-sidebar">
+    <div class="adm-brand">
+      <span class="glyphicon glyphicon-cog sa-brand-icon"></span>
+      <span class="adm-brand-name">Mafel Admin</span>
+    </div>
+    <nav class="adm-nav">
+      <a class="adm-nav-item" ng-class="{active: vm.section==='dashboard'}" ng-click="vm.go('dashboard')">
+        <span class="glyphicon glyphicon-dashboard"></span><span>Dashboard</span>
+      </a>
+      <a class="adm-nav-item" ng-class="{active: vm.section==='providers'}" ng-click="vm.go('providers')">
+        <span class="glyphicon glyphicon-briefcase"></span><span>Prestadores</span>
+      </a>
+    </nav>
+    <div class="adm-sidebar-footer">
+      <div class="sa-version">v1.0.0 · Super Admin</div>
+    </div>
+  </aside>
+
+  <!-- ══ MAIN ═════════════════════════════════════════════════ -->
+  <div class="adm-main">
+    <header class="adm-topbar">
+      <button class="adm-hamburger" ng-click="vm.sidebarOpen=!vm.sidebarOpen">
+        <span class="glyphicon glyphicon-menu-hamburger"></span>
+      </button>
+      <h1 class="adm-page-title" ng-bind="vm.sectionTitle()"></h1>
+      <div class="adm-topbar-right">
+        <span class="adm-tenant-chip sa-chip">
+          <span class="glyphicon glyphicon-lock"></span> Super Admin
+        </span>
+        <span class="adm-tenant-chip" style="background:#e9d5ff;color:#5b21b6;">
+          <span class="glyphicon glyphicon-user"></span>
+          <span ng-bind="vm.userName"></span>
+        </span>
+        <button class="btn btn-default btn-xs" ng-click="vm.logout()" title="Sair">
+          <span class="glyphicon glyphicon-log-out"></span> Sair
+        </button>
+      </div>
+    </header>
+
+    <div class="adm-loading" ng-show="vm.globalLoading">
+      <div class="adm-spinner"></div>
+    </div>
+
+    <div class="adm-content">
+
+      <!-- ══ DASHBOARD ══════════════════════════════════════ -->
+      <div ng-show="vm.section==='dashboard'">
+
+        <div class="row">
+          <div class="col-xs-6 col-md-3">
+            <div class="stat-card stat-blue">
+              <div class="stat-icon"><span class="glyphicon glyphicon-briefcase"></span></div>
+              <div class="stat-info">
+                <div class="stat-number" ng-bind="vm.providers.length"></div>
+                <div class="stat-desc">Total de Prestadores</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-xs-6 col-md-3">
+            <div class="stat-card stat-green">
+              <div class="stat-icon"><span class="glyphicon glyphicon-ok-circle"></span></div>
+              <div class="stat-info">
+                <div class="stat-number" ng-bind="vm.activeCount()"></div>
+                <div class="stat-desc">Ativos</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-xs-6 col-md-3">
+            <div class="stat-card stat-orange">
+              <div class="stat-icon"><span class="glyphicon glyphicon-user"></span></div>
+              <div class="stat-info">
+                <div class="stat-number" ng-bind="vm.totalClients()"></div>
+                <div class="stat-desc">Clientes Totais</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-xs-6 col-md-3">
+            <div class="stat-card stat-red">
+              <div class="stat-icon"><span class="glyphicon glyphicon-remove-circle"></span></div>
+              <div class="stat-info">
+                <div class="stat-number" ng-bind="vm.inactiveCount()"></div>
+                <div class="stat-desc">Inativos</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Distribuição de planos -->
+        <div class="row" style="margin-top:20px">
+          <div class="col-sm-4">
+            <div class="adm-card sa-plan-card">
+              <div class="sa-plan-label">Basic</div>
+              <div class="sa-plan-count" ng-bind="vm.planCount('basic')"></div>
+              <div class="sa-plan-bar">
+                <div class="sa-plan-fill sa-plan-basic"
+                     ng-style="{width: vm.planPct('basic')+'%'}"></div>
+              </div>
+            </div>
+          </div>
+          <div class="col-sm-4">
+            <div class="adm-card sa-plan-card">
+              <div class="sa-plan-label">Professional</div>
+              <div class="sa-plan-count" ng-bind="vm.planCount('professional')"></div>
+              <div class="sa-plan-bar">
+                <div class="sa-plan-fill sa-plan-professional"
+                     ng-style="{width: vm.planPct('professional')+'%'}"></div>
+              </div>
+            </div>
+          </div>
+          <div class="col-sm-4">
+            <div class="adm-card sa-plan-card">
+              <div class="sa-plan-label">Enterprise</div>
+              <div class="sa-plan-count" ng-bind="vm.planCount('enterprise')"></div>
+              <div class="sa-plan-bar">
+                <div class="sa-plan-fill sa-plan-enterprise"
+                     ng-style="{width: vm.planPct('enterprise')+'%'}"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabela resumida de prestadores -->
+        <div class="adm-card" style="margin-top:20px">
+          <div class="adm-card-header">
+            <span class="glyphicon glyphicon-briefcase"></span> Prestadores Recentes
+            <a ng-click="vm.go('providers')" class="adm-card-link">Ver todos</a>
+          </div>
+          <div class="table-responsive">
+            <table class="table adm-table">
+              <thead><tr>
+                <th>Nome</th><th>Slug</th><th>Plano</th>
+                <th>Clientes</th><th>Conversas</th><th>Documentos KB</th><th>Status</th>
+              </tr></thead>
+              <tbody>
+                <tr ng-repeat="p in vm.providers | limitTo:8">
+                  <td><strong ng-bind="p.name"></strong></td>
+                  <td><span class="label label-default" ng-bind="p.slug"></span></td>
+                  <td><span class="label" ng-class="vm.planCls(p.plan)" ng-bind="vm.planLbl(p.plan)"></span></td>
+                  <td ng-bind="vm.statsFor(p.id).clients || 0"></td>
+                  <td ng-bind="vm.statsFor(p.id).conversations || 0"></td>
+                  <td ng-bind="vm.statsFor(p.id).kbDocs || 0"></td>
+                  <td>
+                    <span class="label" ng-class="p.is_active ? 'label-success' : 'label-default'">
+                      {{p.is_active ? 'Ativo' : 'Inativo'}}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ PRESTADORES ════════════════════════════════════ -->
+      <div ng-show="vm.section==='providers'">
+        <div class="adm-toolbar">
+          <div class="input-group" style="max-width:300px">
+            <span class="input-group-addon"><span class="glyphicon glyphicon-search"></span></span>
+            <input type="text" class="form-control" placeholder="Buscar prestador…"
+                   ng-model="vm.search" ng-change="vm.filterProviders()" />
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <div class="btn-group">
+              <button class="btn btn-default btn-sm" ng-class="{active:vm.filterStatus===''}"
+                      ng-click="vm.filterStatus='';vm.filterProviders()">Todos</button>
+              <button class="btn btn-default btn-sm" ng-class="{active:vm.filterStatus==='active'}"
+                      ng-click="vm.filterStatus='active';vm.filterProviders()">Ativos</button>
+              <button class="btn btn-default btn-sm" ng-class="{active:vm.filterStatus==='inactive'}"
+                      ng-click="vm.filterStatus='inactive';vm.filterProviders()">Inativos</button>
+            </div>
+            <button class="btn btn-primary btn-sm" ng-click="vm.openModal()">
+              <span class="glyphicon glyphicon-plus"></span> Novo Prestador
+            </button>
+          </div>
+        </div>
+
+        <div class="adm-card">
+          <div ng-show="vm.filtered.length===0" class="adm-empty" style="padding:40px">
+            <span ng-show="!vm.search && !vm.filterStatus">Nenhum prestador cadastrado.</span>
+            <span ng-show="vm.search || vm.filterStatus">Nenhum resultado para os filtros aplicados.</span>
+          </div>
+          <div class="table-responsive" ng-show="vm.filtered.length>0">
+            <table class="table adm-table">
+              <thead><tr>
+                <th style="width:36px"></th>
+                <th>Nome / Slug</th>
+                <th>Plano</th>
+                <th>Agente</th>
+                <th>Clientes</th>
+                <th>Conversas</th>
+                <th>KB Docs</th>
+                <th>Criado em</th>
+                <th>Status</th>
+                <th style="min-width:140px">Ações</th>
+              </tr></thead>
+              <tbody>
+                <tr ng-repeat="p in vm.filtered" ng-class="{'sa-row-inactive': !p.is_active}">
+                  <td>
+                    <div class="sa-avatar" ng-style="{'background': p.primary_color || '#2563eb'}">
+                      {{p.name[0].toUpperCase()}}
+                    </div>
+                  </td>
+                  <td>
+                    <strong ng-bind="p.name"></strong>
+                    <div class="adm-sub">
+                      <a ng-href="/admin.html?tenant={{p.slug}}" target="_blank">
+                        /{{p.slug}} <span class="glyphicon glyphicon-new-window" style="font-size:10px"></span>
+                      </a>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="label" ng-class="vm.planCls(p.plan)" ng-bind="vm.planLbl(p.plan)"></span>
+                  </td>
+                  <td>
+                    <span ng-bind="p.agent_name || '\u2014'"></span>
+                    <div class="adm-sub" ng-show="p.agent_slug">
+                      <a ng-href="{{vm.chatUrl(p)}}" target="_blank" title="Abrir chat do agente">
+                        /chat/{{p.agent_slug}}
+                        <span class="glyphicon glyphicon-new-window" style="font-size:10px"></span>
+                      </a>
+                      <button class="btn btn-xs" style="padding:0 4px;margin-left:4px;line-height:1.4"
+                              ng-click="vm.copyUrl(p)" title="Copiar URL">
+                        <span class="glyphicon glyphicon-copy" style="font-size:10px"></span>
+                      </button>
+                    </div>
+                  </td>
+                  <td ng-bind="vm.statsFor(p.id).clients || 0"></td>
+                  <td ng-bind="vm.statsFor(p.id).conversations || 0"></td>
+                  <td ng-bind="vm.statsFor(p.id).kbDocs || 0"></td>
+                  <td ng-bind="p.createdAt | date:'dd/MM/yyyy'"></td>
+                  <td>
+                    <span class="label" ng-class="p.is_active ? 'label-success' : 'label-default'">
+                      {{p.is_active ? 'Ativo' : 'Inativo'}}
+                    </span>
+                  </td>
+                  <td class="nowrap">
+                    <button class="btn btn-xs btn-default" ng-click="vm.openModal(p)" title="Editar">
+                      <span class="glyphicon glyphicon-pencil"></span>
+                    </button>
+                    <a class="btn btn-xs btn-info" ng-href="/admin.html?tenant={{p.slug}}"
+                       target="_blank" title="Abrir painel do prestador">
+                      <span class="glyphicon glyphicon-log-in"></span>
+                    </a>
+                    <a class="btn btn-xs btn-default" ng-href="{{vm.chatUrl(p)}}"
+                       target="_blank" title="Ver chat personalizado do agente">
+                      <span class="glyphicon glyphicon-comment"></span>
+                    </a>
+                    <button class="btn btn-xs"
+                            ng-class="p.is_active ? 'btn-warning' : 'btn-success'"
+                            ng-click="vm.toggleActive(p)"
+                            title="{{p.is_active ? 'Desativar' : 'Ativar'}}">
+                      <span class="glyphicon" ng-class="p.is_active ? 'glyphicon-ban-circle' : 'glyphicon-ok-circle'"></span>
+                    </button>
+                    <button class="btn btn-xs btn-danger" ng-click="vm.deleteProvider(p)" title="Excluir permanentemente">
+                      <span class="glyphicon glyphicon-trash"></span>
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /adm-content -->
+  </div><!-- /adm-main -->
+
+  <!-- ══ MODAL: PRESTADOR ════════════════════════════════════ -->
+  <div class="adm-modal-bg" ng-show="vm.modal" ng-click="vm.modal=false"></div>
+  <div class="adm-modal" ng-show="vm.modal">
+    <div class="adm-modal-box adm-modal-lg">
+      <div class="adm-modal-head">
+        <span>
+          <span class="glyphicon glyphicon-briefcase" style="margin-right:6px"></span>
+          {{vm.form.id ? 'Editar Prestador' : 'Novo Prestador'}}
+        </span>
+        <button class="adm-modal-close" ng-click="vm.modal=false">&times;</button>
+      </div>
+      <div class="adm-modal-body">
+
+        <!-- Aba nav -->
+        <ul class="nav nav-tabs sa-tabs" style="margin-bottom:18px">
+          <li ng-class="{active: vm.tab==='info'}">
+            <a ng-click="vm.tab='info'"><span class="glyphicon glyphicon-info-sign"></span> Informações</a>
+          </li>
+          <li ng-class="{active: vm.tab==='visual'}">
+            <a ng-click="vm.tab='visual'"><span class="glyphicon glyphicon-eye-open"></span> Visual</a>
+          </li>
+        </ul>
+
+        <!-- Tab: Informações -->
+        <div ng-show="vm.tab==='info'">
+          <div class="row">
+            <div class="col-sm-6">
+              <div class="form-group" ng-class="{'has-error': vm.errors.name}">
+                <label>Nome da empresa <span class="text-danger">*</span></label>
+                <input class="form-control" ng-model="vm.form.name" placeholder="Ex: Clínica ABC" />
+                <span class="help-block" ng-show="vm.errors.name" ng-bind="vm.errors.name"></span>
+              </div>
+            </div>
+            <div class="col-sm-6">
+              <div class="form-group" ng-class="{'has-error': vm.errors.slug}">
+                <label>Slug <span class="text-danger">*</span>
+                  <small class="text-muted">(URL: /?tenant=<strong ng-bind="vm.form.slug||'slug'"></strong>)</small>
+                </label>
+                <input class="form-control" ng-model="vm.form.slug"
+                       ng-change="vm.sanitizeSlug()"
+                       placeholder="clinica-abc" ng-disabled="!!vm.form.id" />
+                <span class="help-block" ng-show="vm.errors.slug" ng-bind="vm.errors.slug"></span>
+              </div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-sm-6">
+              <div class="form-group">
+                <label>Plano</label>
+                <select class="form-control" ng-model="vm.form.plan">
+                  <option value="basic">Basic</option>
+                  <option value="professional">Professional</option>
+                  <option value="enterprise">Enterprise</option>
+                </select>
+              </div>
+            </div>
+            <div class="col-sm-6">
+              <div class="form-group">
+                <label>Nome do Agente de IA</label>
+                <input class="form-control" ng-model="vm.form.agent_name"
+                       placeholder="Ex: Assistente, Sofia, Max…" />
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Mensagem de boas-vindas</label>
+            <textarea class="form-control" ng-model="vm.form.welcome_message" rows="2"
+                      placeholder="Olá! Como posso ajudar?"></textarea>
+          </div>
+          <div class="form-group" ng-show="vm.form.id">
+            <label><input type="checkbox" ng-model="vm.form.is_active" /> Ativo</label>
+          </div>
+        </div>
+
+        <!-- Tab: Visual -->
+        <div ng-show="vm.tab==='visual'">
+          <div class="row">
+            <div class="col-sm-4">
+              <div class="form-group">
+                <label>Cor principal</label>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <input type="color" class="form-control sa-color-input"
+                         ng-model="vm.form.primary_color" />
+                  <input type="text" class="form-control" ng-model="vm.form.primary_color"
+                         placeholder="#2563eb" style="flex:1" />
+                </div>
+              </div>
+            </div>
+            <div class="col-sm-8">
+              <div class="form-group">
+                <label>URL do Logotipo</label>
+                <input class="form-control" ng-model="vm.form.logo_url"
+                       placeholder="https://…/logo.png" />
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>URL do Fundo do Chat</label>
+            <input class="form-control" ng-model="vm.form.background_url"
+                   placeholder="https://…/background.jpg" />
+          </div>
+          <!-- Preview -->
+          <div class="sa-preview" ng-show="vm.form.primary_color || vm.form.background_url">
+            <div class="sa-preview-label">Preview do chat</div>
+            <div class="sa-preview-chat"
+                 ng-style="{'background-image': vm.form.background_url ? 'url('+vm.form.background_url+')' : 'none',
+                            'background-color': !vm.form.background_url ? (vm.form.primary_color || '#2563eb') : 'transparent'}">
+              <div class="sa-preview-bubble agent"
+                   ng-style="{'background': vm.form.primary_color || '#2563eb'}">
+                {{vm.form.welcome_message || 'Olá! Como posso ajudar?'}}
+              </div>
+              <div class="sa-preview-bubble client">Ok, obrigado!</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <div class="adm-modal-foot">
+        <button class="btn btn-default" ng-click="vm.modal=false">Cancelar</button>
+        <button class="btn btn-primary" ng-click="vm.save()" ng-disabled="vm.saving">
+          <span class="glyphicon"
+                ng-class="vm.saving ? 'glyphicon-refresh adm-spin' : 'glyphicon-floppy-disk'"></span>
+          {{vm.saving ? 'Salvando…' : 'Salvar'}}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TOAST ════════════════════════════════════════════════ -->
+  <div class="adm-toast" ng-show="vm.toast.visible" ng-class="'adm-toast-'+vm.toast.type">
+    <span class="glyphicon"
+          ng-class="{'glyphicon-ok':vm.toast.type==='success','glyphicon-alert':vm.toast.type==='error','glyphicon-info-sign':vm.toast.type==='info'}"></span>
+    <span ng-bind="vm.toast.msg"></span>
+  </div>
+
+  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.3/angular.min.js"></script>
+  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.3/angular-sanitize.min.js"></script>
+  <script src="js/superadmin.js"></script>
+</body>
+</html>

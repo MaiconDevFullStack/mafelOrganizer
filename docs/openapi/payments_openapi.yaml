@@ -1,0 +1,150 @@
+openapi: 3.0.3
+info:
+  title: SaaS Agente Inteligente - APIs Financeiras e Conversação
+  version: 0.1.0
+  description: Skeleton OpenAPI para endpoints críticos (pagamentos, conversação, tenants, webhooks).
+servers:
+  - url: https://api.example.com/v1
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Tenant:
+      type: object
+      required: [name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        plan:
+          type: string
+    PaymentSchedule:
+      type: object
+      required: [amount, method, schedule]
+      properties:
+        id:
+          type: string
+        amount:
+          type: number
+          format: float
+        currency:
+          type: string
+        schedule:
+          type: string
+        method:
+          type: string
+
+paths:
+  /tenants:
+    post:
+      summary: Criar tenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Tenant'
+      responses:
+        '201':
+          description: Tenant criado
+
+  /tenants/{tenantId}/kb/upload:
+    post:
+      summary: Upload de documento para KB (ingest)
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Documento ingerido e embeddings criados
+
+  /conversations:
+    post:
+      summary: Iniciar/continuar conversa (sync)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tenantId:
+                  type: string
+                userId:
+                  type: string
+                message:
+                  type: string
+      responses:
+        '200':
+          description: Resposta do agente
+
+  /payments/schedules:
+    post:
+      summary: Criar agendamento de pagamento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentSchedule'
+      responses:
+        '201':
+          description: PaymentSchedule criado
+    get:
+      summary: Listar agendamentos
+      parameters:
+        - name: tenantId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de agendamentos
+
+  /payments/schedules/{id}/execute:
+    post:
+      summary: Executar cobrança manualmente para um schedule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Resultado da execução (success|failed)
+
+  /webhooks/payment:
+    post:
+      summary: Receber eventos de PSP (webhook)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Evento processado
+
+tags:
+  - name: tenants
+  - name: conversations
+  - name: payments

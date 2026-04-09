@@ -1,0 +1,7 @@
+[Prestador]->[Cadastrar agendamento (cliente, valor, data_vencimento)]
+[Cadastrar agendamento (cliente, valor, data_vencimento)]->[API Gateway cria Agendamento]
+[API Gateway cria Agendamento]->[PaymentScheduler salva Agendamento]
+[PaymentScheduler salva Agendamento]->[Registrar no Log de Auditoria]
+[PaymentScheduler salva Agendamento]->[Notificar cliente automaticamente (agendamento criado)]
+
+// Fluxo: o prestador cadastra a data de vencimento; o sistema notifica o cliente automaticamente.

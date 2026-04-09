@@ -1,0 +1,103 @@
+/* ============================================================
+   superadmin.css — complemento do admin.css para o Super Admin
+   ============================================================ */
+
+/* ── Sidebar cor diferenciada ─────────────────────────────── */
+.sa-sidebar { background: #111827; }
+.sa-sidebar .adm-nav-item.active { background: #7c3aed; }
+.sa-sidebar .adm-nav-item:hover  { background: #1f2937; }
+.sa-brand-icon { color: #a78bfa !important; }
+.sa-chip { background: #f5f3ff; color: #6d28d9; border-color: #ddd6fe; }
+.sa-version { font-size: 11px; color: rgba(255,255,255,.3); padding: 12px 20px; }
+
+/* ── Avatar da inicial ────────────────────────────────────── */
+.sa-avatar {
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* ── Linha inativa ────────────────────────────────────────── */
+.sa-row-inactive td { opacity: .5; }
+.sa-row-inactive td:first-child { border-left: 3px solid #94a3b8; }
+
+/* ── Cards de plano (dashboard) ───────────────────────────── */
+.sa-plan-card {
+  padding: 18px 20px;
+  text-align: center;
+}
+.sa-plan-label { font-size: 11px; font-weight: 700; text-transform: uppercase;
+                 letter-spacing: .08em; color: var(--text-muted); margin-bottom: 4px; }
+.sa-plan-count { font-size: 32px; font-weight: 700; line-height: 1; margin-bottom: 10px; }
+.sa-plan-bar   { height: 6px; background: #e2e8f0; border-radius: 4px; overflow:hidden; }
+.sa-plan-fill  { height: 100%; border-radius: 4px; transition: width .4s ease; min-width: 4px; }
+.sa-plan-basic        .sa-plan-count { color: #2563eb; }
+.sa-plan-professional .sa-plan-count { color: #7c3aed; }
+.sa-plan-enterprise   .sa-plan-count { color: #ea580c; }
+.sa-plan-fill.sa-plan-basic        { background: #2563eb; }
+.sa-plan-fill.sa-plan-professional { background: #7c3aed; }
+.sa-plan-fill.sa-plan-enterprise   { background: #ea580c; }
+
+/* ── Tabs no modal ────────────────────────────────────────── */
+.sa-tabs { border-bottom: 2px solid var(--border); margin-bottom: 16px !important; }
+.sa-tabs > li > a {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  border: none !important;
+  border-bottom: 2px solid transparent !important;
+  margin-bottom: -2px;
+  padding: 8px 14px;
+  transition: color .15s;
+  cursor: pointer;
+}
+.sa-tabs > li.active > a { color: #7c3aed; border-bottom-color: #7c3aed !important; }
+.sa-tabs > li > a:hover  { color: var(--text); background: none; }
+
+/* ── Color input ──────────────────────────────────────────── */
+.sa-color-input {
+  width: 48px !important;
+  height: 36px;
+  padding: 2px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+/* ── Preview chat ─────────────────────────────────────────── */
+.sa-preview { margin-top: 16px; }
+.sa-preview-label { font-size: 11px; font-weight: 700; text-transform: uppercase;
+                    color: var(--text-muted); letter-spacing:.06em; margin-bottom: 8px; }
+.sa-preview-chat {
+  border-radius: 12px;
+  padding: 16px;
+  min-height: 100px;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+}
+.sa-preview-chat::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,.25);
+  border-radius: 12px;
+}
+.sa-preview-bubble {
+  max-width: 75%;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  position: relative;
+  z-index: 1;
+  word-break: break-word;
+}
+.sa-preview-bubble.agent { color: #fff; align-self: flex-start; border-bottom-left-radius: 4px; }
+.sa-preview-bubble.client { background: #fff; color: #1e293b; align-self: flex-end;
+                             border-bottom-right-radius: 4px; }

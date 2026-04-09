@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="pt-br" ng-app="mafelLogin">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Login · Mafel Organizer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <!-- Bootstrap 3 (apenas CSS) -->
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css"/>
+  <link rel="stylesheet" href="css/login.css"/>
+</head>
+
+<body ng-controller="LoginController as vm">
+
+  <div class="login-wrapper">
+    <div class="login-card">
+
+      <!-- ── Header ── -->
+      <div class="login-header">
+        <div class="logo-icon">
+          <span class="glyphicon glyphicon-briefcase"></span>
+        </div>
+        <h1>Mafel Organizer</h1>
+        <p>Acesse sua conta de prestador de serviços</p>
+      </div>
+
+      <!-- ── Formulário ── -->
+      <div class="login-body">
+
+        <!-- Alerta de erro -->
+        <div class="alert-login" ng-if="vm.error">
+          <span class="glyphicon glyphicon-exclamation-sign"></span>
+          <span ng-bind="vm.error"></span>
+        </div>
+
+        <form ng-submit="vm.login()" novalidate autocomplete="off">
+
+          <!-- E-mail ou Celular -->
+          <div class="form-group">
+            <label for="identifier">E-mail ou Celular</label>
+            <div class="input-group-login">
+              <span class="glyphicon glyphicon-user input-icon"></span>
+              <input
+                id="identifier"
+                type="text"
+                ng-model="vm.identifier"
+                placeholder="seu@email.com ou (11) 99999-0000"
+                required
+                autofocus
+                autocomplete="username"/>
+            </div>
+          </div>
+
+          <!-- Senha -->
+          <div class="form-group">
+            <label for="password">Senha</label>
+            <div class="input-group-login">
+              <span class="glyphicon glyphicon-lock input-icon"></span>
+              <input
+                id="password"
+                ng-attr-type="{{ vm.showPwd ? 'text' : 'password' }}"
+                ng-model="vm.password"
+                placeholder="••••••••"
+                required
+                autocomplete="current-password"/>
+              <button type="button" class="toggle-pwd" ng-click="vm.showPwd = !vm.showPwd" tabindex="-1">
+                <span class="glyphicon" ng-class="vm.showPwd ? 'glyphicon-eye-close' : 'glyphicon-eye-open'"></span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Botão -->
+          <button class="btn-login" type="submit" ng-disabled="vm.loading || !vm.identifier || !vm.password">
+            <span ng-if="vm.loading">
+              <span class="spinner-inline"></span>Entrando…
+            </span>
+            <span ng-if="!vm.loading">
+              <span class="glyphicon glyphicon-log-in"></span>Entrar
+            </span>
+          </button>
+
+        </form>
+      </div>
+
+      <!-- ── Cadastre-se ── -->
+      <div class="login-register-cta">
+        <span>Não tem conta?</span>
+        <a href="register.html" class="btn-register-link">
+          <span class="glyphicon glyphicon-user"></span> Cadastre-se
+        </a>
+      </div>
+
+      <!-- ── Footer ── -->
+      <div class="login-footer">
+        Mafel Organizer &copy; 2026
+      </div>
+
+    </div><!-- /.login-card -->
+
+    <div class="version-tag">Mafel Organizer © 2026</div>
+  </div>
+
+  <!-- AngularJS -->
+  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.3/angular.min.js"></script>
+  <script>
+    (function () {
+      'use strict';
+
+      angular
+        .module('mafelLogin', [])
+        .controller('LoginController', ['$http', '$window', function ($http, $window) {
+          var vm = this;
+
+          vm.identifier = '';
+          vm.password   = '';
+          vm.loading    = false;
+          vm.error      = null;
+          vm.showPwd    = false;
+
+          // Se já tem token válido, redireciona direto
+          (function checkExisting() {
+            var token = $window.localStorage.getItem('mf_token');
+            var role  = $window.localStorage.getItem('mf_role');
+            if (token) {
+              if (role === 'admin') {
+                $window.location.href = 'superadmin.html';
+              } else {
+                var slug = $window.localStorage.getItem('mf_tenant_slug');
+                $window.location.href = 'admin.html' + (slug ? '?tenant=' + slug : '');
+              }
+            }
+          })();
+
+          vm.login = function () {
+            if (vm.loading) return;
+            vm.error   = null;
+            vm.loading = true;
+
+            $http.post('/api/auth/login', { identifier: vm.identifier, password: vm.password })
+              .then(function (res) {
+                var data = res.data;
+                $window.localStorage.setItem('mf_token',       data.token);
+                $window.localStorage.setItem('mf_role',        data.user.role);
+                $window.localStorage.setItem('mf_user_id',     data.user.id);
+                $window.localStorage.setItem('mf_user_name',   data.user.name);
+                $window.localStorage.setItem('mf_tenant_id',   data.user.tenant_id   || '');
+                $window.localStorage.setItem('mf_tenant_slug', data.user.tenant_slug || '');
+
+                if (data.user.role === 'admin') {
+                  $window.location.href = 'superadmin.html';
+                } else {
+                  var slug = data.user.tenant_slug;
+                  $window.location.href = 'admin.html' + (slug ? '?tenant=' + slug : '');
+                }
+              })
+              .catch(function (err) {
+                vm.error = (err.data && err.data.error) ? err.data.error : 'Erro ao conectar ao servidor.';
+                vm.loading = false;
+              });
+          };
+        }]);
+    })();
+  </script>
+</body>
+</html>
