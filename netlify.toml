@@ -9,11 +9,10 @@
   command = "echo 'Static site — no build step'"
 
 # ── Proxy: repassa todas as chamadas /api/* para o backend no Railway ─────────
-# ATENÇÃO: substitua a URL abaixo pela URL real do seu serviço no Railway
-# Exemplo: https://mafelorganizer-production.up.railway.app
+# Backend no Railway
 [[redirects]]
   from   = "/api/*"
-  to     = "https://SEU_BACKEND.up.railway.app/api/:splat"
+  to     = "https://mafelorganizer-production.up.railway.app/api/:splat"
   status = 200
   force  = true
 
