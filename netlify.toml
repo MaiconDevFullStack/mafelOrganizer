@@ -1,0 +1,32 @@
+# netlify.toml — MafelOrganizer Frontend
+# Documentação: https://docs.netlify.com/configure-builds/file-based-configuration/
+
+[build]
+  # Pasta publicada no Netlify
+  publish = "frontend"
+
+  # Não há etapa de build (HTML/CSS/JS estáticos)
+  command = "echo 'Static site — no build step'"
+
+# ── Proxy: repassa todas as chamadas /api/* para o backend no Railway ─────────
+# ATENÇÃO: substitua a URL abaixo pela URL real do seu serviço no Railway
+# Exemplo: https://mafelorganizer-production.up.railway.app
+[[redirects]]
+  from   = "/api/*"
+  to     = "https://SEU_BACKEND.up.railway.app/api/:splat"
+  status = 200
+  force  = true
+
+# ── Rota de fallback SPA ───────────────────────────────────────────────────────
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200
+
+# ── Headers de segurança ──────────────────────────────────────────────────────
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options        = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy        = "strict-origin-when-cross-origin"

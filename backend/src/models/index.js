@@ -5,12 +5,10 @@ const config = require('../config/database');
 const env = process.env.NODE_ENV || 'development';
 const dbConfig = config[env];
 
-const sequelize = new Sequelize(
-  dbConfig.database,
-  dbConfig.username,
-  dbConfig.password,
-  dbConfig
-);
+// Railway injeta DATABASE_URL — suportamos as duas formas de instanciar
+const sequelize = dbConfig.url
+  ? new Sequelize(dbConfig.url, dbConfig)
+  : new Sequelize(dbConfig.database, dbConfig.username, dbConfig.password, dbConfig);
 
 const db = {};
 
