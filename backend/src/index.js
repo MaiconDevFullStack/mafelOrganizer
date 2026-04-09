@@ -44,6 +44,9 @@ app.get('/api/health', (_req, res) => {
   res.status(200).json({ status: 'ok', db: dbReady, ts: new Date() });
 });
 
+// ── Redireciona raiz para login ───────────────────────────────
+app.get('/', (_req, res) => res.redirect('/login.html'));
+
 // ── Servir frontend estático ──────────────────────────────────
 app.use(express.static(path.join(__dirname, '../../frontend')));
 
