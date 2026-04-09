@@ -38,6 +38,12 @@ app.use(rateLimit({
   legacyHeaders: false,
 }));
 
+// ── Health check — ANTES de tudo para o Railway validar o deploy ──
+let dbReady = false;
+app.get('/api/health', (_req, res) => {
+  res.status(200).json({ status: 'ok', db: dbReady, ts: new Date() });
+});
+
 // ── Servir frontend estático ──────────────────────────────────
 app.use(express.static(path.join(__dirname, '../../frontend')));
 
@@ -52,18 +58,19 @@ app.use('/api/subscriptions', subscriptionsRouter);
 app.use('/api/scheduling',    schedulingRouter);
 app.use('/api/whatsapp',      whatsappRouter);
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', ts: new Date() });
-});
-
 // ── Fallback SPA ──────────────────────────────────────────────
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../../frontend/index.html'));
 });
 
 // ── Inicialização ─────────────────────────────────────────────
+// O servidor sobe PRIMEIRO para o healthcheck do Railway passar,
+// depois conecta ao banco de forma assíncrona.
 const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀  Servidor rodando na porta ${PORT}`);
+});
 
 (async () => {
   try {
@@ -71,6 +78,7 @@ const PORT = process.env.PORT || 3000;
     console.log('✅  Banco de dados conectado.');
     await sequelize.sync({ alter: true });
     console.log('✅  Models sincronizados.');
+    dbReady = true;
 
     // Backfill: gera agent_slug para tenants existentes que ainda não têm
     const { Tenant: TenantModel } = require('./models');
@@ -94,13 +102,10 @@ const PORT = process.env.PORT || 3000;
       await t.update({ agent_slug: finalSlug });
       console.log(`✅  agent_slug gerado: "${t.agent_name}" → /chat/${finalSlug}`);
     }
-
-    app.listen(PORT, () => {
-      console.log(`🚀  Servidor rodando em http://localhost:${PORT}`);
-    });
   } catch (err) {
-    console.error('❌  Erro ao iniciar servidor:', err);
-    process.exit(1);
+    console.error('❌  Erro ao conectar ao banco:', err.message);
+    // Não encerra o processo — o servidor continua rodando
+    // para permitir diagnóstico via /api/health
   }
 })();
 
