@@ -65,6 +65,18 @@
         vm.modals       = { client: false, pay: false };
         vm.toast        = { visible: false, msg: '', type: 'success' };
 
+        /* Conversas */
+        vm.conversations    = [];
+        vm.activeConv       = null;
+        vm.convMessages     = [];
+        vm.convInput        = '';
+        vm.convSending      = false;
+        vm.convLoading      = false;
+        vm.convFilter       = 'open';
+        vm.convMobileView   = 'list';
+        vm.openConvCount    = 0;
+        var _convPollTimer;
+
         /* Listas */
         vm.kbDocs         = [];
         vm.clients        = [];
@@ -120,17 +132,19 @@
           if (sec === 'receivable') loadPayments('receivable');
           if (sec === 'payable')    loadPayments('payable');
           if (sec === 'dashboard')  { loadAll(); }
+          if (sec === 'conversations') vm.loadConversations();
           if (sec === 'profile')    vm.loadProfile();
         };
 
         vm.sectionTitle = function () {
           var map = {
-            dashboard:  'Dashboard',
-            kb:         'Base de Conhecimento',
-            clients:    'Clientes',
-            receivable: 'Contas a Receber',
-            payable:    'Contas a Pagar',
-            profile:    'Meu Perfil',
+            dashboard:     'Dashboard',
+            kb:            'Base de Conhecimento',
+            clients:       'Clientes',
+            conversations: 'Conversas',
+            receivable:    'Contas a Receber',
+            payable:       'Contas a Pagar',
+            profile:       'Meu Perfil',
           };
           return map[vm.section] || '';
         };
@@ -442,6 +456,119 @@
             completed: 'label-success',
             cancelled: 'label-default',
           }[s] || 'label-default';
+        };
+
+        /* ── Conversas (Inbox) ───────────────────────────── */
+        vm.loadConversations = function () {
+          var params = { tenant_id: vm.tenant.id };
+          if (vm.convFilter !== 'all') params.status = vm.convFilter;
+          $http.get(API + '/conversations', { params: params })
+            .then(function (r) {
+              vm.conversations = r.data;
+              vm.openConvCount = r.data.filter(function (c) { return c.status === 'open'; }).length;
+            });
+        };
+
+        vm.setConvFilter = function (f) {
+          vm.convFilter = f;
+          vm.loadConversations();
+        };
+
+        vm.selectConv = function (conv) {
+          vm.activeConv     = conv;
+          vm.convMobileView = 'chat';
+          vm.convMessages   = [];
+          vm.convLoading    = true;
+          if (_convPollTimer) $timeout.cancel(_convPollTimer);
+          _fetchMessages(conv.id);
+        };
+
+        vm.backToList = function () {
+          vm.convMobileView = 'list';
+          if (_convPollTimer) $timeout.cancel(_convPollTimer);
+        };
+
+        function _fetchMessages(convId) {
+          $http.get(API + '/conversations/' + convId + '/messages')
+            .then(function (r) {
+              vm.convMessages = r.data.messages || [];
+              vm.convLoading  = false;
+              _scrollInbox();
+              // polling a cada 5 s enquanto a conversa estiver selecionada
+              if (vm.activeConv && vm.activeConv.id === convId) {
+                _convPollTimer = $timeout(function () { _fetchMessages(convId); }, 5000);
+              }
+            })
+            .catch(function () { vm.convLoading = false; });
+        }
+
+        function _scrollInbox() {
+          $timeout(function () {
+            var el = document.getElementById('inboxMessages');
+            if (el) el.scrollTop = el.scrollHeight;
+          }, 60);
+        }
+
+        vm.sendHumanMsg = function () {
+          var text = (vm.convInput || '').trim();
+          if (!text || !vm.activeConv) return;
+          vm.convSending = true;
+          $http.post(API + '/conversations/' + vm.activeConv.id + '/messages/human', { text: text })
+            .then(function (r) {
+              vm.convInput = '';
+              vm.convMessages.push(r.data);
+              // Atualiza preview na lista
+              var conv = vm.conversations.find(function (c) { return c.id === vm.activeConv.id; });
+              if (conv) {
+                if (!conv.messages) conv.messages = [];
+                conv.messages.push(r.data);
+              }
+              _scrollInbox();
+            })
+            .catch(function (e) {
+              notify(e.data && e.data.error ? e.data.error : 'Erro ao enviar mensagem.', 'error');
+            })
+            .finally(function () { vm.convSending = false; });
+        };
+
+        vm.onConvKey = function ($event) {
+          if ($event.key === 'Enter' && !$event.shiftKey) {
+            $event.preventDefault();
+            vm.sendHumanMsg();
+          }
+        };
+
+        vm.closeConv = function () {
+          if (!vm.activeConv) return;
+          $http.patch(API + '/conversations/' + vm.activeConv.id, { status: 'closed' })
+            .then(function () {
+              vm.activeConv.status = 'closed';
+              var conv = vm.conversations.find(function (c) { return c.id === vm.activeConv.id; });
+              if (conv) conv.status = 'closed';
+              vm.openConvCount = Math.max(0, vm.openConvCount - 1);
+              notify('Conversa encerrada.', 'info');
+            })
+            .catch(function () { notify('Erro ao encerrar conversa.', 'error'); });
+        };
+
+        vm.initials = function (name) {
+          if (!name) return '?';
+          return name.split(' ').slice(0, 2).map(function (n) { return n.charAt(0).toUpperCase(); }).join('');
+        };
+
+        vm.lastMsg = function (conv) {
+          var msgs = conv.messages || [];
+          if (!msgs.length) return 'Sem mensagens';
+          return msgs[msgs.length - 1].text;
+        };
+
+        vm.relTime = function (dt) {
+          if (!dt) return '';
+          var diff = Math.floor((new Date() - new Date(dt)) / 60000);
+          if (diff < 1)    return 'agora';
+          if (diff < 60)   return diff + 'min';
+          if (diff < 1440) return Math.floor(diff / 60) + 'h';
+          return Math.floor(diff / 1440) + 'd';
         };
 
         /* ── Toast ───────────────────────────────────────── */

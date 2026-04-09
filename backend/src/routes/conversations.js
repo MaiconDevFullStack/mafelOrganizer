@@ -3,6 +3,26 @@ const router = express.Router();
 const { Conversation, Message, Tenant, KnowledgeBase } = require('../models');
 const { generateGroqReply } = require('../services/groqService');
 
+// GET /conversations?tenant_id=xxx[&status=open|closed|all]
+router.get('/', async (req, res) => {
+  try {
+    const { tenant_id, status } = req.query;
+    if (!tenant_id) return res.status(400).json({ error: 'tenant_id obrigatório' });
+
+    const where = { tenant_id };
+    if (status && status !== 'all') where.status = status;
+
+    const conversations = await Conversation.findAll({
+      where,
+      include: [{ model: Message, as: 'messages', order: [['createdAt', 'ASC']] }],
+      order: [['updatedAt', 'DESC']],
+    });
+    res.json(conversations);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /conversations — iniciar conversa
 router.post('/', async (req, res) => {
   try {
@@ -70,6 +90,42 @@ router.post('/:id/messages', async (req, res) => {
     });
 
     res.json({ clientMessage: clientMsg, agentMessage: agentMsg });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /conversations/:id/messages/human — mensagem manual do prestador (sem IA)
+router.post('/:id/messages/human', async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text) return res.status(400).json({ error: 'Mensagem não pode ser vazia' });
+
+    const conversation = await Conversation.findByPk(req.params.id);
+    if (!conversation) return res.status(404).json({ error: 'Conversa não encontrada' });
+
+    const msg = await Message.create({
+      conversation_id: conversation.id,
+      author: 'human',
+      text,
+    });
+
+    res.status(201).json(msg);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /conversations/:id — atualizar status (open, escalated, closed)
+router.patch('/:id', async (req, res) => {
+  try {
+    const conversation = await Conversation.findByPk(req.params.id);
+    if (!conversation) return res.status(404).json({ error: 'Conversa não encontrada' });
+
+    const { status } = req.body;
+    if (status) await conversation.update({ status });
+
+    res.json(conversation);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

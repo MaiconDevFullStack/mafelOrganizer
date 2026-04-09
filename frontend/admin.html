@@ -31,6 +31,10 @@
       <a class="adm-nav-item" ng-class="{active: vm.section==='clients'}" ng-click="vm.go('clients')">
         <span class="glyphicon glyphicon-user"></span><span>Clientes</span>
       </a>
+      <a class="adm-nav-item" ng-class="{active: vm.section==='conversations'}" ng-click="vm.go('conversations')">
+        <span class="glyphicon glyphicon-comment"></span><span>Conversas</span>
+        <span class="adm-nav-badge" ng-show="vm.openConvCount > 0" ng-bind="vm.openConvCount"></span>
+      </a>
       <div class="adm-nav-divider">FINANCEIRO</div>
       <a class="adm-nav-item adm-nav-rec" ng-class="{active: vm.section==='receivable'}" ng-click="vm.go('receivable')">
         <span class="glyphicon glyphicon-arrow-down"></span><span>Contas a Receber</span>
@@ -75,7 +79,7 @@
       <div class="adm-spinner"></div>
     </div>
 
-    <div class="adm-content">
+    <div class="adm-content" ng-class="{'adm-content--nopad': vm.section==='conversations'}">
 
       <!-- ══ DASHBOARD ══════════════════════════════════════ -->
       <div ng-show="vm.section==='dashboard'">
@@ -532,6 +536,130 @@
           </div>
 
         </form>
+      </div>
+
+      <!-- ══ CONVERSAS ════════════════════════════════════════ -->
+      <div ng-show="vm.section==='conversations'" class="inbox-wrap">
+
+        <!-- ── Lista de conversas ─────────────────────────────── -->
+        <div class="inbox-list" ng-class="{'inbox-list--hidden': vm.convMobileView==='chat'}">
+          <div class="inbox-list-head">
+            <strong class="inbox-list-title">Conversas</strong>
+            <div class="inbox-filter">
+              <button ng-class="{active: vm.convFilter==='open'}"  ng-click="vm.setConvFilter('open')">Abertas</button>
+              <button ng-class="{active: vm.convFilter==='all'}"   ng-click="vm.setConvFilter('all')">Todas</button>
+            </div>
+          </div>
+          <div class="inbox-list-body">
+            <div class="inbox-empty" ng-show="vm.conversations.length===0">
+              <span class="glyphicon glyphicon-comment"></span>
+              <p>Nenhuma conversa encontrada</p>
+            </div>
+            <div class="inbox-conv-item"
+                 ng-repeat="c in vm.conversations"
+                 ng-click="vm.selectConv(c)"
+                 ng-class="{active: vm.activeConv && vm.activeConv.id===c.id}">
+              <div class="inbox-avatar">
+                <span ng-bind="vm.initials(c.client_name)"></span>
+              </div>
+              <div class="inbox-conv-info">
+                <div class="inbox-conv-name" ng-bind="c.client_name || 'Visitante'"></div>
+                <div class="inbox-conv-preview" ng-bind="vm.lastMsg(c)"></div>
+              </div>
+              <div class="inbox-conv-meta">
+                <span class="inbox-badge"
+                      ng-class="c.status==='open'?'inbox-badge--open':c.status==='escalated'?'inbox-badge--escalated':'inbox-badge--closed'">
+                  {{c.status==='open'?'Aberta':c.status==='escalated'?'Escalada':'Fechada'}}
+                </span>
+                <span class="inbox-conv-time" ng-bind="vm.relTime(c.updatedAt)"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Painel de chat ─────────────────────────────────── -->
+        <div class="inbox-chat" ng-class="{'inbox-chat--active': vm.convMobileView==='chat'}">
+
+          <!-- Sem conversa selecionada -->
+          <div class="inbox-no-conv" ng-hide="vm.activeConv">
+            <span class="glyphicon glyphicon-comment"></span>
+            <p>Selecione uma conversa para ver as mensagens</p>
+          </div>
+
+          <!-- Header -->
+          <div class="inbox-chat-head" ng-show="vm.activeConv">
+            <button class="inbox-back-btn" ng-click="vm.backToList()">
+              <span class="glyphicon glyphicon-chevron-left"></span>
+            </button>
+            <div class="inbox-avatar inbox-avatar--sm"
+                 ng-style="{'background': vm.tenant.primary_color || '#2563eb'}">
+              <span ng-bind="vm.initials(vm.activeConv.client_name)"></span>
+            </div>
+            <div class="inbox-chat-head-info">
+              <strong ng-bind="vm.activeConv.client_name || 'Visitante'"></strong>
+              <span>
+                <span ng-bind="vm.activeConv.channel"></span>
+                &nbsp;&middot;&nbsp;
+                <span class="inbox-badge inbox-badge--sm"
+                      ng-class="vm.activeConv.status==='open'?'inbox-badge--open':'inbox-badge--closed'">
+                  {{vm.activeConv.status==='open'?'Aberta':'Fechada'}}
+                </span>
+              </span>
+            </div>
+            <div class="inbox-chat-actions">
+              <button class="btn btn-xs btn-default"
+                      ng-show="vm.activeConv.status==='open'"
+                      ng-click="vm.closeConv()">
+                <span class="glyphicon glyphicon-ok-circle"></span>
+                <span class="hidden-xs"> Encerrar</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Mensagens -->
+          <div class="inbox-messages" id="inboxMessages" ng-show="vm.activeConv">
+            <div class="inbox-loading" ng-show="vm.convLoading">
+              <span class="glyphicon glyphicon-refresh adm-spin"></span> Carregando…
+            </div>
+            <div ng-repeat="m in vm.convMessages"
+                 class="inbox-msg-row"
+                 ng-class="m.author==='agent' ? 'inbox-agent-row' : 'inbox-client-row'">
+              <div class="inbox-msg-bubble"
+                   ng-class="{'inbox-bubble-agent': m.author==='agent',
+                              'inbox-bubble-client': m.author==='client',
+                              'inbox-bubble-human':  m.author==='human'}">
+                <p ng-bind="m.text"></p>
+                <span class="inbox-msg-time">
+                  {{m.createdAt | date:'HH:mm'}}
+                  &middot;
+                  {{m.author==='human' ? 'Você' : (m.author==='agent' ? 'Agente IA' : (vm.activeConv.client_name || 'Cliente'))}}
+                </span>
+              </div>
+            </div>
+            <div ng-show="!vm.convLoading && vm.convMessages.length===0" class="inbox-no-messages">
+              Nenhuma mensagem nesta conversa.
+            </div>
+          </div>
+
+          <!-- Input do prestador -->
+          <div class="inbox-input-wrap" ng-show="vm.activeConv && vm.activeConv.status==='open'">
+            <textarea class="inbox-input"
+                      ng-model="vm.convInput"
+                      placeholder="Responda como prestador (Enter para enviar, Shift+Enter nova linha)…"
+                      ng-keydown="vm.onConvKey($event)"
+                      rows="1"></textarea>
+            <button class="inbox-send-btn"
+                    ng-click="vm.sendHumanMsg()"
+                    ng-disabled="!vm.convInput || vm.convSending">
+              <span class="glyphicon"
+                    ng-class="vm.convSending ? 'glyphicon-refresh adm-spin' : 'glyphicon-send'"></span>
+            </button>
+          </div>
+          <div class="inbox-closed-notice" ng-show="vm.activeConv && vm.activeConv.status!=='open'">
+            <span class="glyphicon glyphicon-lock"></span> Conversa encerrada
+          </div>
+
+        </div>
       </div>
 
     </div><!-- /adm-content -->
