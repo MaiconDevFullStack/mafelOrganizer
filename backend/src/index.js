@@ -44,8 +44,16 @@ app.get('/api/health', (_req, res) => {
   res.status(200).json({ status: 'ok', db: dbReady, ts: new Date() });
 });
 
-// ── Redireciona raiz para login ───────────────────────────────
-app.get('/', (_req, res) => res.redirect('/login.html'));
+// ── Raiz sem parâmetros → redireciona para login (admin) ──────
+// Se vier com ?tenant=... o chat é servido diretamente sem login.
+// /chat/<slug> cai no fallback SPA abaixo (também sem login).
+app.get('/', (req, res) => {
+  if (req.query.tenant) {
+    // URL legada do chat: /?tenant=<slug> → serve o chat sem login
+    return res.sendFile(path.join(__dirname, '../../frontend/index.html'));
+  }
+  res.redirect('/login.html');
+});
 
 // ── Servir frontend estático ──────────────────────────────────
 app.use(express.static(path.join(__dirname, '../../frontend')));
