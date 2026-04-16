@@ -115,6 +115,7 @@
           })
           .then(function (res) {
             vm.conversationId = res.data.id;
+            _resetInactivityTimer(); // começa a contar inatividade
           })
           .catch(function (err) {
             console.warn('Tenant não encontrado, usando padrão.', err);
@@ -156,6 +157,8 @@
       vm.sendMessage = function () {
         var text = (vm.inputText || '').trim();
         if (!text || vm.isSending) return;
+
+        _resetInactivityTimer(); // reinicia contagem de inatividade
 
         vm.isSending = true;
         vm.inputText = '';
@@ -264,6 +267,8 @@
         var text = (vm.inputText || '').trim();
         if (!text || vm.isSending) return;
 
+        _resetInactivityTimer();
+
         vm.isSending = true;
         var currentStep = vm.bookingStep;
         vm.inputText = '';
@@ -345,6 +350,54 @@
         var el = document.getElementById('chatInput');
         if (el) el.focus();
       }
+
+      // ── Encerrar sessão do cliente ───────────────────────────
+      // Usa sendBeacon para garantir envio mesmo quando a aba fecha.
+      var _inactivityTimer = null;
+      var INACTIVITY_MS    = 20 * 60 * 1000; // 20 min sem mensagem
+
+      function _closeSession() {
+        if (!vm.conversationId) return;
+        var url = '/api/conversations/' + vm.conversationId + '/close';
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon(url);
+        } else {
+          // Fallback síncrono para browsers antigos
+          var xhr = new XMLHttpRequest();
+          xhr.open('POST', url, false);
+          xhr.send();
+        }
+        vm.conversationId = null; // evita duplo envio
+      }
+
+      function _resetInactivityTimer() {
+        if (_inactivityTimer) clearTimeout(_inactivityTimer);
+        _inactivityTimer = setTimeout(function () {
+          // Avisa o cliente e encerra
+          $scope.$apply(function () {
+            vm.messages.push({
+              author: 'agent',
+              text: 'Sua sessão foi encerrada por inatividade. Recarregue a página para continuar.',
+              created_at: new Date(),
+            });
+            scrollToBottom();
+          });
+          _closeSession();
+        }, INACTIVITY_MS);
+      }
+
+      // Fecha ao sair/recarregar a página
+      window.addEventListener('beforeunload', _closeSession);
+
+      // Fecha quando a aba entra em segundo plano por mais de 5 min
+      var _hiddenTimer = null;
+      document.addEventListener('visibilitychange', function () {
+        if (document.hidden) {
+          _hiddenTimer = setTimeout(_closeSession, 5 * 60 * 1000);
+        } else {
+          if (_hiddenTimer) { clearTimeout(_hiddenTimer); _hiddenTimer = null; }
+        }
+      });
 
       // Auto-resize do textarea
       $scope.$watch(function () { return vm.inputText; }, function () {

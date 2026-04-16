@@ -91,7 +91,27 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log('✅  Models sincronizados.');
     dbReady = true;
 
-    // Backfill: gera agent_slug para tenants existentes que ainda não têm
+    // ── Job: fecha conversas abertas sem atividade há 30 min ──
+    // Roda logo ao iniciar e, depois, a cada 15 minutos.
+    const { Conversation: ConvModel, Message: MsgModel } = require('./models');
+    async function autoCloseInactive() {
+      try {
+        const { Op } = require('sequelize');
+        const cutoff = new Date(Date.now() - 30 * 60 * 1000); // 30 min atrás
+        const stale = await ConvModel.findAll({
+          where: { status: 'open', updatedAt: { [Op.lt]: cutoff } },
+        });
+        if (stale.length > 0) {
+          const ids = stale.map((c) => c.id);
+          await ConvModel.update({ status: 'closed' }, { where: { id: { [Op.in]: ids } } });
+          console.log(`🔒  Auto-fechou ${stale.length} conversa(s) inativa(s).`);
+        }
+      } catch (e) {
+        console.warn('⚠️  autoCloseInactive:', e.message);
+      }
+    }
+    autoCloseInactive();
+    setInterval(autoCloseInactive, 15 * 60 * 1000);
     const { Tenant: TenantModel } = require('./models');
     const { Op } = require('sequelize');
     function _toAgentSlug(name) {

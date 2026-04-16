@@ -131,4 +131,19 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
+// POST /conversations/:id/close — encerrar sessão do cliente
+// Aceita chamadas de navigator.sendBeacon (sem body), não exige auth.
+router.post('/:id/close', async (req, res) => {
+  try {
+    const conversation = await Conversation.findByPk(req.params.id);
+    if (!conversation) return res.status(204).send();          // já inexistente — ok
+    if (conversation.status === 'open') {
+      await conversation.update({ status: 'closed' });
+    }
+    res.status(204).send();
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
