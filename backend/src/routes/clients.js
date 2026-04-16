@@ -15,10 +15,10 @@ const clientSchema = Joi.object({
   is_active: Joi.boolean().default(true),
 });
 
-const updateSchema = clientSchema
-  .fork(['tenant_id', 'name'], (field) => field.optional())
-  // O frontend envia o objeto completo (incluindo id) — ignoramos sem erro
-  .keys({ id: Joi.string().uuid().optional() });
+const updateSchema = clientSchema.fork(
+  ['tenant_id', 'name'],
+  (field) => field.optional()
+);
 
 // GET /api/clients?tenant_id=...&search=...
 router.get('/', async (req, res) => {
@@ -47,7 +47,7 @@ router.get('/', async (req, res) => {
 // POST /api/clients
 router.post('/', async (req, res) => {
   try {
-    const { error, value } = clientSchema.validate(req.body);
+    const { error, value } = clientSchema.validate(req.body, { stripUnknown: true });
     if (error) return res.status(400).json({ error: error.details[0].message });
     const client = await Client.create(value);
     res.status(201).json(client);
@@ -70,7 +70,7 @@ router.get('/:id', async (req, res) => {
 // PATCH /api/clients/:id
 router.patch('/:id', async (req, res) => {
   try {
-    const { error, value } = updateSchema.validate(req.body);
+    const { error, value } = updateSchema.validate(req.body, { stripUnknown: true });
     if (error) return res.status(400).json({ error: error.details[0].message });
 
     const client = await Client.findByPk(req.params.id);
