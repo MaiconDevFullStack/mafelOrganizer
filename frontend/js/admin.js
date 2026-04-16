@@ -352,30 +352,53 @@
           vm.clientQuery = schedule ? (schedule.client_name || '') : '';
           vm.acList      = [];
           vm.showAc      = false;
-          vm.pForm = schedule
-            ? angular.copy(schedule)
-            : {
-                tenant_id:      vm.tenant.id,
-                type:           type,
-                recurrence:     'once',
-                payment_method: 'pix',
-                currency:       'BRL',
-                is_recurring:   false,
-              };
-          vm.pForm.type = type;
-          // Ao editar, marca is_recurring se for mensal com dia definido
-          // e normaliza due_date para yyyy-MM-dd (remove hora/fuso)
+
           if (schedule) {
-            vm.pForm.is_recurring = (schedule.recurrence === 'monthly' && !!schedule.recurring_day);
-            if (vm.pForm.due_date && typeof vm.pForm.due_date === 'string') {
-              vm.pForm.due_date = vm.pForm.due_date.substring(0, 10);
+            var s = angular.copy(schedule);
+            // Garante tipos corretos (Sequelize retorna DECIMAL como string)
+            s.amount        = s.amount        != null ? parseFloat(s.amount)        : null;
+            s.recurring_day = s.recurring_day != null ? parseInt(s.recurring_day, 10) : null;
+            // Normaliza due_date para YYYY-MM-DD
+            if (s.due_date && typeof s.due_date === 'string') {
+              s.due_date = s.due_date.substring(0, 10);
             }
-            // Garante que notify_time seja sempre string HH:MM (nunca Date)
-            if (vm.pForm.notify_time && typeof vm.pForm.notify_time !== 'string') {
-              vm.pForm.notify_time = null;
-            } else if (vm.pForm.notify_time) {
-              vm.pForm.notify_time = vm.pForm.notify_time.substring(0, 5);
+            // Normaliza notify_time para HH:MM
+            if (s.notify_time && typeof s.notify_time === 'string') {
+              s.notify_time = s.notify_time.substring(0, 5);
+            } else {
+              s.notify_time = '';
             }
+            // Garante campos de texto nunca nulos (evita crash no template)
+            s.description    = s.description    || '';
+            s.notes          = s.notes          || '';
+            s.custom_message = s.custom_message || '';
+            s.category       = s.category       || '';
+            s.client_email   = s.client_email   || '';
+            s.client_phone   = s.client_phone   || '';
+            s.is_recurring   = (s.recurrence === 'monthly' && !!s.recurring_day);
+            s.type           = type;
+            vm.pForm = s;
+          } else {
+            // Novo lançamento — todos os campos explicitamente inicializados
+            vm.pForm = {
+              tenant_id:      vm.tenant.id,
+              type:           type,
+              recurrence:     'once',
+              payment_method: 'pix',
+              currency:       'BRL',
+              is_recurring:   false,
+              amount:         null,
+              due_date:       '',
+              recurring_day:  null,
+              client_name:    '',
+              client_email:   '',
+              client_phone:   '',
+              category:       '',
+              description:    '',
+              notes:          '',
+              custom_message: '',
+              notify_time:    '',
+            };
           }
           vm.modals.pay = true;
         };
@@ -426,16 +449,10 @@
           req
             .then(function (r) {
               var type = payload.type || r.data.type;
-              if (isEdit) {
-                var arr = type === 'receivable' ? vm.receivable : vm.payable;
-                var idx = arr.findIndex(function (s) { return s.id === r.data.id; });
-                if (idx >= 0) arr[idx] = r.data;
-              } else {
-                if (type === 'receivable') vm.receivable.push(r.data);
-                else                        vm.payable.push(r.data);
-              }
               vm.modals.pay = false;
               notify('Lançamento salvo com sucesso!', 'success');
+              // Recarrega lista completa para garantir dados frescos
+              loadPayments(type);
               loadStats();
             })
             .catch(function (e) {
