@@ -137,61 +137,57 @@ app.listen(PORT, '0.0.0.0', () => {
       try {
         // ── Hora atual em Brasília (UTC-3) ──────────────────────────────
         const now = new Date();
-        // Data/hora local de Brasília como string — sem depender do TZ do servidor
-        const brDate = new Date(now.getTime() - 3 * 60 * 60 * 1000); // subtrai 3h do UTC
+        const brDate      = new Date(now.getTime() - 3 * 60 * 60 * 1000);
         const brHH        = String(brDate.getUTCHours()).padStart(2, '0');
         const brMM        = String(brDate.getUTCMinutes()).padStart(2, '0');
-        const currentTime = `${brHH}:${brMM}`;           // "HH:MM"
-        const todayDate   = brDate.toISOString().slice(0, 10); // "YYYY-MM-DD" (BR)
-        const todayDay    = brDate.getUTCDate();           // 1-31
+        const currentTime = `${brHH}:${brMM}`;
+        const todayDate   = brDate.toISOString().slice(0, 10);
+        const todayDay    = brDate.getUTCDate();
 
         const { Op } = require('sequelize');
 
-        // Busca registros cujo notify_time começa com HH:MM (compatível com HH:MM e HH:MM:SS)
+        // ── Busca candidatos ──────────────────────────────────────────
+        // Para cobranças únicas (once): notifica independente do status de pagamento
+        // Para recorrentes: notifica somente as ativas
         const candidates = await PSModel.findAll({
           where: {
-            status: 'active',
             notify_time: { [Op.like]: `${currentTime}%` },
+            [Op.or]: [
+              // once: pendente de notificação, em qualquer status de pagamento
+              { recurrence: 'once',    notification_status: 'pending' },
+              // recorrentes: ativas (notifica todo mês/semana/ano)
+              { recurrence: 'monthly', status: 'active' },
+              { recurrence: 'weekly',  status: 'active' },
+              { recurrence: 'yearly',  status: 'active' },
+            ],
           },
         });
 
         for (const schedule of candidates) {
           try {
-            // ── Deduplicação: calcula data BR do último envio ──────────
+            // ── Deduplicação por data BR ───────────────────────────────
             let lastNotifiedDateBR = null;
             if (schedule.last_notified_at) {
-              const lastUTC = new Date(schedule.last_notified_at);
-              const lastBR  = new Date(lastUTC.getTime() - 3 * 60 * 60 * 1000);
-              lastNotifiedDateBR = lastBR.toISOString().slice(0, 10); // "YYYY-MM-DD" em BR
+              const lastBR = new Date(new Date(schedule.last_notified_at).getTime() - 3 * 60 * 60 * 1000);
+              lastNotifiedDateBR = lastBR.toISOString().slice(0, 10);
             }
-
-            // Já enviou hoje (horário BR)? Pula.
             if (lastNotifiedDateBR === todayDate) continue;
 
             // ── Verifica se deve disparar hoje ─────────────────────────
             let shouldSend = false;
-
             if (schedule.recurrence === 'once') {
-              // Dispara apenas no dia do vencimento, uma única vez
-              shouldSend = schedule.due_date === todayDate &&
-                           schedule.notification_status === 'pending';
+              shouldSend = schedule.due_date === todayDate;
             } else if (schedule.recurrence === 'monthly') {
-              // Dispara todo mês no dia recurring_day
               shouldSend = Number(schedule.recurring_day) === todayDay;
             } else {
-              // weekly / yearly: dispara no dia do vencimento
               shouldSend = schedule.due_date === todayDate;
             }
-
             if (!shouldSend) continue;
 
-            // ── Busca nome do tenant e envia ───────────────────────────
+            // ── Envia ──────────────────────────────────────────────────
             const tenant = await TenantModelForNotif.findByPk(schedule.tenant_id, { attributes: ['name'] });
-            const tenantName = tenant?.name || '';
+            await notifyClientPayment(schedule, tenant?.name || '');
 
-            await notifyClientPayment(schedule, tenantName);
-
-            // Marca envio (armazena timestamp UTC real)
             const updates = { last_notified_at: now };
             if (schedule.recurrence === 'once') updates.notification_status = 'sent';
             await schedule.update(updates);
@@ -206,8 +202,61 @@ app.listen(PORT, '0.0.0.0', () => {
       }
     }
 
+    // ── Catch-up: recupera notificações perdidas do dia ──────────────
+    // Roda uma vez na inicialização — captura qualquer registro cujo
+    // notify_time já passou hoje mas nunca foi enviado (ex: server restart)
+    async function catchUpTodayNotifications() {
+      try {
+        const now     = new Date();
+        const brDate  = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+        const brHH    = String(brDate.getUTCHours()).padStart(2, '0');
+        const brMM    = String(brDate.getUTCMinutes()).padStart(2, '0');
+        const todayDate = brDate.toISOString().slice(0, 10);
+        const todayDay  = brDate.getUTCDate();
+
+        const { Op } = require('sequelize');
+
+        // Registros únicos pendentes de hoje cujo horário já passou (notify_time <= agora)
+        const missed = await PSModel.findAll({
+          where: {
+            notification_status: 'pending',
+            last_notified_at: null,
+            [Op.or]: [
+              { recurrence: 'once',    due_date: todayDate },
+              { recurrence: 'monthly', recurring_day: todayDay, status: 'active' },
+              { recurrence: 'weekly',  due_date: todayDate,     status: 'active' },
+              { recurrence: 'yearly',  due_date: todayDate,     status: 'active' },
+            ],
+          },
+        });
+
+        for (const schedule of missed) {
+          if (!schedule.notify_time) continue;
+          // Só envia se o horário programado já passou
+          const [hh, mm] = schedule.notify_time.split(':').map(Number);
+          const scheduledMinutes = hh * 60 + mm;
+          const nowMinutes = brDate.getUTCHours() * 60 + brDate.getUTCMinutes();
+          if (scheduledMinutes > nowMinutes) continue; // ainda não chegou a hora
+
+          try {
+            const tenant = await TenantModelForNotif.findByPk(schedule.tenant_id, { attributes: ['name'] });
+            await notifyClientPayment(schedule, tenant?.name || '');
+            const updates = { last_notified_at: now };
+            if (schedule.recurrence === 'once') updates.notification_status = 'sent';
+            await schedule.update(updates);
+            console.log(`🔔 [catch-up] Notificação recuperada: cliente="${schedule.client_name}" horário=${schedule.notify_time}`);
+          } catch (err) {
+            console.error(`⚠️  [catch-up] Erro ao notificar ${schedule.id}:`, err.message);
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️  catchUpTodayNotifications:', e.message);
+      }
+    }
+
+    catchUpTodayNotifications(); // dispara 1x na inicialização
     sendScheduledPaymentNotifications();
-    setInterval(sendScheduledPaymentNotifications, 60 * 1000); // a cada minuto
+    setInterval(sendScheduledPaymentNotifications, 60 * 1000);
 
     const { Tenant: TenantModel } = require('./models');
     const { Op } = require('sequelize');
