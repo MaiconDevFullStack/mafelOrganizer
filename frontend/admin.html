@@ -193,7 +193,8 @@
                 <textarea class="form-control" ng-model="vm.kb.description" rows="3"
                           placeholder="Sobre o que é este documento?"></textarea>
               </div>
-              <div class="col-sm-2" style="display:flex;align-items:flex-end">
+              <div class="col-sm-2 kb-send-col">
+                <label class="adm-label kb-send-spacer">&nbsp;</label>
                 <button class="btn btn-primary btn-block" ng-click="vm.uploadKb()"
                         ng-disabled="!vm.kb.file || vm.kb.uploading">
                   <span class="glyphicon" ng-class="vm.kb.uploading ? 'glyphicon-refresh adm-spin' : 'glyphicon-upload'"></span>

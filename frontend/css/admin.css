@@ -335,6 +335,19 @@ input[type="date"].form-control {
 .upload-prompt span { font-size: 13px; }
 .upload-chosen { display: flex; align-items: center; gap: 6px; font-size: 13px; }
 
+/* ── KB: coluna do botão Enviar ──────────────────────────── */
+.kb-send-col {
+  display: flex;
+  flex-direction: column;
+}
+/* Label-espaçador: alinha o botão verticalmente com os outros campos */
+.kb-send-spacer {
+  display: block;
+  visibility: hidden;  /* ocupa espaço sem mostrar texto */
+  user-select: none;
+  pointer-events: none;
+}
+
 /* ── Modals ───────────────────────────────────────────────── */
 .adm-modal-bg {
   position: fixed;
@@ -602,6 +615,10 @@ input[type="date"].form-control {
 
   /* Upload: empilha colunas */
   .adm-card-body .row [class*="col-sm-"] { width: 100%; float: none; }
+
+  /* KB botão Enviar: no mobile empilhado remove o espaçador e adiciona margem */
+  .kb-send-spacer { display: none; }
+  .kb-send-col    { margin-top: 12px; }
 
   /* Modal — corrigido para Android:
      O container (.adm-modal) preenche o viewport e rola se necessário.
