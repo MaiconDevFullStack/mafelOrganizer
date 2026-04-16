@@ -860,8 +860,10 @@
                 Horário da cobrança
                 <small class="text-muted">(envio automático)</small>
               </label>
-              <input type="time" class="form-control" ng-model="vm.pForm.notify_time" />
-              <span class="help-block" style="font-size:11px">Deixe em branco para não enviar automaticamente.</span>
+              <input type="text" class="form-control" ng-model="vm.pForm.notify_time"
+                     placeholder="09:00" maxlength="5"
+                     pattern="([01][0-9]|2[0-3]):[0-5][0-9]" />
+              <span class="help-block" style="font-size:11px">Formato HH:MM. Deixe em branco para não enviar automaticamente.</span>
             </div>
           </div>
         </div>

@@ -370,6 +370,12 @@
             if (vm.pForm.due_date && typeof vm.pForm.due_date === 'string') {
               vm.pForm.due_date = vm.pForm.due_date.substring(0, 10);
             }
+            // Garante que notify_time seja sempre string HH:MM (nunca Date)
+            if (vm.pForm.notify_time && typeof vm.pForm.notify_time !== 'string') {
+              vm.pForm.notify_time = null;
+            } else if (vm.pForm.notify_time) {
+              vm.pForm.notify_time = vm.pForm.notify_time.substring(0, 5);
+            }
           }
           vm.modals.pay = true;
         };
