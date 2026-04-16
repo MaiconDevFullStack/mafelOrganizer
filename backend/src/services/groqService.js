@@ -3,32 +3,37 @@
 const Groq     = require('groq-sdk');
 const fs       = require('fs');
 const path     = require('path');
-const crypto   = require('crypto');
 const pdfParse = require('pdf-parse');
 const mammoth  = require('mammoth');
 
 const UPLOAD_DIR = path.join(__dirname, '../../../uploads/kb');
 
 // ── Modelos ────────────────────────────────────────────────────
-// Llama 3.1 8B → respostas rápidas, saudações, fluxos simples
-// Llama 3.3 70B → raciocínio complexo, KB relevante, perguntas técnicas
+// Llama 3.1 8B  → saudações, fluxos simples, sumarizações internas
+// Llama 3.3 70B → respostas baseadas em KB, raciocínio complexo
 const MODEL_FAST   = process.env.GROQ_MODEL_FAST   || 'llama-3.1-8b-instant';
 const MODEL_STRONG = process.env.GROQ_MODEL_STRONG || 'llama-3.3-70b-versatile';
 
 // ── Chunking ───────────────────────────────────────────────────
-const CHUNK_SIZE    = 700;   // chars por chunk
-const CHUNK_OVERLAP = 120;   // sobreposição entre chunks consecutivos
-const TOP_K_CHUNKS  = 5;     // chunks mais relevantes enviados ao modelo
-const MAX_KB_CHARS  = 3500;  // limite total de chars de KB no prompt
+const CHUNK_SIZE        = 600;   // chars por chunk (menor = mais granular)
+const CHUNK_OVERLAP     = 100;   // sobreposição entre chunks consecutivos
+const TOP_K_RAW         = 10;    // chunks candidatos antes da deduplicação
+const TOP_K_FINAL       = 5;     // chunks finais após deduplicação
+const MAX_KB_CHARS      = 4000;  // limite total de chars de KB no prompt
+const MIN_CHUNK_SCORE   = 0.015; // limiar mínimo de relevância TF-IDF
+const JACCARD_THRESHOLD = 0.50;  // similaridade máxima entre chunks (dedup)
 
-// ── Histórico ─────────────────────────────────────────────────
-const HISTORY_LIMIT = 10;
+// ── Histórico e sumarização ───────────────────────────────────
+const HISTORY_KEEP     = 6;   // mensagens recentes mantidas íntegras
+const SUMMARY_TRIGGER  = 10;  // a partir de N msgs históricas, sumariza as antigas
 
 // ── Cache em memória ──────────────────────────────────────────
-// textCache : filename  → { text, mtime }   (invalidado por mtime do arquivo)
-// chunkCache: tenantId  → { chunks, ts }    (TTL = CHUNK_CACHE_TTL)
-const textCache  = new Map();
-const chunkCache = new Map();
+// textCache    : filename       → { text, mtime }
+// chunkCache   : tenantId       → { chunks, ts }    (TTL = CHUNK_CACHE_TTL)
+// summaryCache : conversationId → { summary, seenCount }
+const textCache    = new Map();
+const chunkCache   = new Map();
+const summaryCache = new Map();
 const CHUNK_CACHE_TTL = 5 * 60 * 1000; // 5 minutos
 
 // ─────────────────────────────────────────────────────────────
@@ -69,19 +74,67 @@ async function extractText(doc) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 2. CHUNKING COM SOBREPOSIÇÃO
+// 2. CHUNKING COM SOBREPOSIÇÃO + DEDUPLICAÇÃO INTRA-CHUNK
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Divide um texto em chunks com sobreposição para preservar contexto
- * entre segmentos adjacentes.
+ * Remove sentenças duplicadas ou quase-duplicadas dentro de um texto.
+ * Usa Jaccard sobre trigramas de palavras para detectar repetição.
+ */
+function deduplicateSentences(text) {
+  const sentences = text
+    .split(/(?<=[.!?;])\s+|\n+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 20);
+
+  if (sentences.length <= 1) return text;
+
+  const seen  = [];
+  const kept  = [];
+
+  for (const sent of sentences) {
+    const toks = tokenize(sent);
+    const trig = new Set(buildNgrams(toks, 3));
+    const isDuplicate = seen.some(seenTrig => jaccardSetSimilarity(trig, seenTrig) > 0.6);
+    if (!isDuplicate) {
+      kept.push(sent);
+      seen.push(trig);
+    }
+  }
+
+  return kept.join(' ');
+}
+
+/** Gera n-gramas de tokens como strings "a|b|c". */
+function buildNgrams(tokens, n) {
+  const result = [];
+  for (let i = 0; i <= tokens.length - n; i++) {
+    result.push(tokens.slice(i, i + n).join('|'));
+  }
+  return result;
+}
+
+/** Similaridade de Jaccard entre dois Sets. */
+function jaccardSetSimilarity(setA, setB) {
+  if (!setA.size && !setB.size) return 1;
+  let inter = 0;
+  for (const item of setA) if (setB.has(item)) inter++;
+  return inter / (setA.size + setB.size - inter);
+}
+
+/**
+ * Divide um texto em chunks com sobreposição, removendo conteúdo
+ * redundante dentro de cada chunk antes de armazená-lo.
  */
 function splitIntoChunks(text, docName) {
-  const chunks = [];
+  // Limpa espaços excessivos e linhas em branco
+  const cleaned = text.replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim();
+  const chunks  = [];
   let start = 0;
-  while (start < text.length) {
-    const end   = Math.min(start + CHUNK_SIZE, text.length);
-    const slice = text.slice(start, end).trim();
+
+  while (start < cleaned.length) {
+    const end   = Math.min(start + CHUNK_SIZE, cleaned.length);
+    const slice = deduplicateSentences(cleaned.slice(start, end).trim());
     if (slice.length > 60) chunks.push({ source: docName, text: slice });
     start += CHUNK_SIZE - CHUNK_OVERLAP;
   }
@@ -134,20 +187,49 @@ function scoreChunk(chunkTokens, queryTokens, idf) {
 }
 
 /**
- * Seleciona os top-K chunks mais relevantes para a query do usuário.
+ * Seleciona os top-K chunks mais relevantes para a query do usuário,
+ * depois aplica deduplicação inter-chunk por similaridade Jaccard para
+ * evitar enviar conteúdo redundante ao modelo.
+ *
+ * Retorna também `hasRelevantContent` (bool) — falso quando nenhum chunk
+ * atingiu MIN_CHUNK_SCORE (KB existe mas não tem resposta para a pergunta).
  */
-function selectTopChunks(allChunks, query, k) {
-  if (!allChunks.length) return [];
+function selectTopChunks(allChunks, query, kRaw, kFinal) {
+  if (!allChunks.length) return { chunks: [], hasRelevantContent: false };
+
   const queryTokens = tokenize(query);
   const idf         = buildIdf(allChunks);
 
-  return allChunks
+  // Pontua e ordena
+  const scored = allChunks
     .map(chunk => ({
       ...chunk,
       score: scoreChunk(tokenize(chunk.text), queryTokens, idf),
     }))
     .sort((a, b) => b.score - a.score)
-    .slice(0, k);
+    .slice(0, kRaw);
+
+  const best = scored[0]?.score || 0;
+  const hasRelevantContent = best >= MIN_CHUNK_SCORE;
+
+  // Deduplicação inter-chunk: descarta chunks muito similares entre si
+  const selected  = [];
+  const tokenSets = []; // Set de trigramas de cada chunk já selecionado
+
+  for (const chunk of scored) {
+    const toks = tokenize(chunk.text);
+    const trig = new Set(buildNgrams(toks, 3));
+    const tooSimilar = tokenSets.some(
+      existing => jaccardSetSimilarity(trig, existing) >= JACCARD_THRESHOLD
+    );
+    if (!tooSimilar) {
+      selected.push(chunk);
+      tokenSets.push(trig);
+      if (selected.length >= kFinal) break;
+    }
+  }
+
+  return { chunks: selected, hasRelevantContent };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -156,8 +238,11 @@ function selectTopChunks(allChunks, query, k) {
 
 /**
  * Monta o contexto KB enviando apenas os chunks mais relevantes
- * para a mensagem atual. O conjunto de chunks do tenant é cacheado
- * por TTL para evitar releitura de arquivos a cada mensagem.
+ * para a mensagem atual, sem redundâncias.
+ *
+ * Retorna { context: string, hasKb: bool, hasRelevantContent: bool }
+ *   - hasKb              → tenant tem documentos na KB
+ *   - hasRelevantContent → algum chunk passou o limiar MIN_CHUNK_SCORE
  */
 async function buildKbContext(KnowledgeBase, tenantId, userQuery) {
   const docs = await KnowledgeBase.findAll({
@@ -165,9 +250,9 @@ async function buildKbContext(KnowledgeBase, tenantId, userQuery) {
     order:  [['created_at', 'DESC']],
     limit:  30,
   });
-  if (!docs.length) return '';
+  if (!docs.length) return { context: '', hasKb: false, hasRelevantContent: false };
 
-  // ── Cache de chunks por tenant ──
+  // ── Cache de chunks por tenant ──────────────────────────────
   let allChunks;
   const cached = chunkCache.get(tenantId);
   if (cached && (Date.now() - cached.ts) < CHUNK_CACHE_TTL) {
@@ -179,15 +264,18 @@ async function buildKbContext(KnowledgeBase, tenantId, userQuery) {
       if (text.trim()) {
         allChunks.push(...splitIntoChunks(text, doc.original_name));
       } else if (doc.description) {
-        allChunks.push({ source: doc.original_name, text: doc.description });
+        // Documento sem arquivo (só descrição)
+        allChunks.push({ source: doc.original_name, text: doc.description.trim() });
       }
     }
     chunkCache.set(tenantId, { chunks: allChunks, ts: Date.now() });
-    console.log(`[Groq] Cache KB atualizado: tenant=${tenantId} chunks=${allChunks.length}`);
+    console.log(`[Groq] Cache KB: tenant=${tenantId} chunks=${allChunks.length}`);
   }
 
-  // ── Seleciona top-K mais relevantes para esta query ──
-  const topChunks = selectTopChunks(allChunks, userQuery, TOP_K_CHUNKS);
+  // ── Seleciona e deduplica ───────────────────────────────────
+  const { chunks: topChunks, hasRelevantContent } = selectTopChunks(
+    allChunks, userQuery, TOP_K_RAW, TOP_K_FINAL
+  );
 
   let context    = '';
   let totalChars = 0;
@@ -199,7 +287,7 @@ async function buildKbContext(KnowledgeBase, tenantId, userQuery) {
     totalChars += entry.length;
   }
 
-  return context;
+  return { context, hasKb: true, hasRelevantContent };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -222,69 +310,125 @@ const COMPLEX_KW = [
   'juridico','jurídico','cláusula','política','termos',
 ];
 
-/**
- * Retorna MODEL_FAST ou MODEL_STRONG com base em heurísticas locais.
- * Nenhuma chamada de API é feita aqui — decisão 100% local e instantânea.
- *
- * Regras (por ordem de prioridade):
- *   1. Saudações / respostas de cortesia              → FAST
- *   2. Mensagem curta (< 55 chars) sem KB             → FAST
- *   3. Palavras-chave de complexidade                 → STRONG
- *   4. Contexto KB presente + conversa >= 4 turnos    → STRONG
- *   5. Contexto KB presente + mensagem > 70 chars     → STRONG
- *   6. Demais casos                                   → FAST
- */
 function selectModel(userText, hasKb, historyLen) {
   const lower = userText.toLowerCase().trim();
-
-  if (SIMPLE_RE.some(p => p.test(lower)))                          return MODEL_FAST;
-  if (userText.length < 55 && !hasKb)                              return MODEL_FAST;
-  if (COMPLEX_KW.some(kw => lower.includes(kw)))                   return MODEL_STRONG;
-  if (hasKb && historyLen >= 4)                                     return MODEL_STRONG;
-  if (hasKb && userText.length > 70)                               return MODEL_STRONG;
+  if (SIMPLE_RE.some(p => p.test(lower)))                return MODEL_FAST;
+  if (userText.length < 55 && !hasKb)                    return MODEL_FAST;
+  if (COMPLEX_KW.some(kw => lower.includes(kw)))         return MODEL_STRONG;
+  if (hasKb && historyLen >= 4)                          return MODEL_STRONG;
+  if (hasKb && userText.length > 70)                     return MODEL_STRONG;
   return MODEL_FAST;
 }
 
 // ─────────────────────────────────────────────────────────────
-// 6. SYSTEM PROMPT
+// 6. SUMARIZAÇÃO DO HISTÓRICO
 // ─────────────────────────────────────────────────────────────
 
-function buildSystemPrompt(tenant, kbContext) {
-  const agentName   = tenant.agent_name        || 'Assistente';
-  const companyName = tenant.name              || 'a empresa';
-  const welcome     = tenant.welcome_message   || '';
+/**
+ * Quando o histórico cresce além de SUMMARY_TRIGGER mensagens,
+ * resume as mais antigas com o MODEL_FAST para reduzir tokens.
+ * As HISTORY_KEEP mensagens mais recentes são preservadas íntegras.
+ *
+ * @returns {{ summary: string|null, recentHistory: Array }}
+ */
+async function summarizeHistory(groq, messages) {
+  if (messages.length <= SUMMARY_TRIGGER) {
+    return { summary: null, recentHistory: messages };
+  }
 
-  let prompt  = `Você é ${agentName}, o assistente virtual inteligente de ${companyName}. `;
-  prompt     += `Responda sempre em português, de forma cordial, objetiva e útil. `;
-  if (welcome) prompt += `Sua saudação padrão é: "${welcome}". `;
-  prompt     += `Jamais invente informações que não estejam na base de conhecimento ou no contexto fornecido. `;
-  prompt     += `Se não souber a resposta, diga educadamente que vai verificar e sugerir que o cliente entre em contato diretamente.\n\n`;
+  const toSummarize = messages.slice(0, messages.length - HISTORY_KEEP);
+  const recent      = messages.slice(-HISTORY_KEEP);
 
-  if (kbContext.trim()) {
-    prompt += `## Base de Conhecimento (trechos mais relevantes para esta mensagem)\n\n`;
-    prompt += `Use APENAS as informações abaixo para responder:\n\n`;
+  const transcript = toSummarize
+    .map(m => `${m.role === 'user' ? 'Cliente' : 'Agente'}: ${m.content}`)
+    .join('\n');
+
+  try {
+    const res = await groq.chat.completions.create({
+      model: MODEL_FAST,
+      messages: [
+        {
+          role: 'system',
+          content: 'Você é um assistente de sumarização. Resuma o histórico de conversa abaixo em até 5 frases concisas em português, preservando os pontos essenciais discutidos. Não adicione nenhuma informação nova.',
+        },
+        { role: 'user', content: transcript },
+      ],
+      temperature:       0.1,
+      max_tokens:        200,
+      frequency_penalty: 0.5,
+    });
+
+    const summary = res.choices[0]?.message?.content?.trim() || null;
+    console.log(`[Groq] Histórico sumarizado (${toSummarize.length} msgs → ${summary?.length || 0} chars)`);
+    return { summary, recentHistory: recent };
+  } catch (err) {
+    console.warn('[Groq] Falha na sumarização do histórico:', err.message);
+    // fallback: mantém só as recentes sem resumo
+    return { summary: null, recentHistory: recent };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// 7. SYSTEM PROMPT
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Constrói o system prompt com grau de restrição proporcional à KB:
+ *  - Sem KB          → assistente genérico amigável
+ *  - KB presente     → EXCLUSIVAMENTE baseado nos trechos fornecidos
+ *  - Resumo incluso  → adiciona contexto do histórico sumarizado
+ */
+function buildSystemPrompt(tenant, kbContext, hasKb, historySummary) {
+  const agentName   = tenant.agent_name      || 'Assistente';
+  const companyName = tenant.name            || 'a empresa';
+  const welcome     = tenant.welcome_message || '';
+
+  let prompt = `Você é ${agentName}, o assistente virtual oficial de ${companyName}.\n`;
+  prompt    += `Responda SEMPRE em português, de forma cordial, clara e objetiva.\n`;
+  if (welcome) prompt += `Sua saudação padrão é: "${welcome}".\n`;
+
+  if (hasKb && kbContext.trim()) {
+    // Modo KB-exclusivo: respostas apenas com o que está na base
+    prompt += `\n## REGRAS ABSOLUTAS — LEIA ANTES DE RESPONDER\n`;
+    prompt += `1. Você SOMENTE pode responder com informações presentes nos trechos da Base de Conhecimento abaixo.\n`;
+    prompt += `2. Se a resposta NÃO estiver na base, diga exatamente: "Não encontrei essa informação na minha base de conhecimento. Recomendo entrar em contato diretamente com a equipe de ${companyName} para obter essa resposta."\n`;
+    prompt += `3. NUNCA invente, suponha ou complete com conhecimento geral. Se tiver dúvida, recuse.\n`;
+    prompt += `4. Não cite os nomes dos arquivos fonte na resposta ao cliente.\n`;
+    prompt += `5. Se a resposta puder ser dada, seja direto: use a informação da base sem rodeios.\n`;
+    prompt += `\n## Base de Conhecimento — Trechos Relevantes para esta Mensagem\n\n`;
     prompt += kbContext;
+  } else if (hasKb && !kbContext.trim()) {
+    // KB existe mas nenhum chunk foi relevante — instruído a recusar
+    prompt += `\nA empresa possui uma base de conhecimento, mas nenhum trecho relevante foi encontrado para esta pergunta específica.\n`;
+    prompt += `Informe ao cliente que não encontrou essa informação e sugira contato direto com a equipe de ${companyName}.\n`;
+    prompt += `NUNCA invente ou suponha informações.\n`;
   } else {
-    prompt += `Nenhuma base de conhecimento foi configurada ainda. `;
-    prompt += `Responda com base no contexto da conversa e informações gerais sobre ${companyName}.`;
+    // Sem KB configurada
+    prompt += `\nNenhuma base de conhecimento foi configurada para este agente ainda.\n`;
+    prompt += `Responda somente com base no contexto da conversa atual e em informações gerais públicas sobre ${companyName}.\n`;
+    prompt += `Jamais invente dados específicos como preços, prazos ou procedimentos internos.\n`;
+  }
+
+  if (historySummary) {
+    prompt += `\n\n## Resumo do início desta conversa\n${historySummary}`;
   }
 
   return prompt;
 }
 
 // ─────────────────────────────────────────────────────────────
-// 7. FUNÇÃO PRINCIPAL
+// 8. FUNÇÃO PRINCIPAL
 // ─────────────────────────────────────────────────────────────
 
 /**
  * Gera a resposta do agente via Groq.
  *
- * Melhorias aplicadas:
- *  - Chunks relevantes por TF-IDF (só os top-K chegam ao prompt)
- *  - Cache de texto extraído por arquivo (invalidado por mtime)
- *  - Cache de chunks por tenant (TTL de 5 min)
- *  - Seleção automática de modelo: llama-3.1-8b-instant para fluxos
- *    simples; llama-3.3-70b-versatile somente quando necessário
+ * Pipeline:
+ *  1. buildKbContext  → chunks relevantes deduplicados + flag de relevância
+ *  2. Resposta antecipada se KB existe mas nada foi encontrado
+ *  3. summarizeHistory → comprime histórico longo (> SUMMARY_TRIGGER msgs)
+ *  4. buildSystemPrompt com modo KB-exclusivo forçado quando aplicável
+ *  5. Chamada Groq com frequency_penalty + presence_penalty
  *
  * @param {string} userText      – mensagem atual do usuário
  * @param {Object} tenant        – registro Tenant do Sequelize
@@ -300,35 +444,56 @@ async function generateGroqReply(userText, tenant, previousMsgs = [], KnowledgeB
   }
 
   try {
-    const groq      = new Groq({ apiKey });
-    const kbContext = await buildKbContext(KnowledgeBase, tenant.id, userText);
-    const sysPrompt = buildSystemPrompt(tenant, kbContext);
+    const groq = new Groq({ apiKey });
 
-    const history = previousMsgs
-      .slice(-HISTORY_LIMIT)
+    // 1. Contexto KB
+    const { context: kbContext, hasKb, hasRelevantContent } =
+      await buildKbContext(KnowledgeBase, tenant.id, userText);
+
+    // 2. KB existe mas pergunta está fora do escopo → recusa imediata sem chamar o modelo forte
+    const isSimpleGreeting = SIMPLE_RE.some(p => p.test(userText.toLowerCase().trim()));
+    if (hasKb && !hasRelevantContent && !isSimpleGreeting) {
+      const companyName = tenant.name || 'a empresa';
+      console.log(`[Groq] KB sem relevância para query — retornando recusa direta.`);
+      return `Não encontrei essa informação na minha base de conhecimento. Recomendo entrar em contato diretamente com a equipe de ${companyName} para obter essa resposta.`;
+    }
+
+    // 3. Histórico: sumariza se muito longo
+    const rawHistory = previousMsgs
+      .slice(-Math.max(SUMMARY_TRIGGER + HISTORY_KEEP, 20))
       .map(m => ({
         role:    m.author === 'agent' ? 'assistant' : 'user',
         content: m.text,
       }));
 
+    const { summary, recentHistory } = await summarizeHistory(groq, rawHistory);
+
+    // 4. System prompt KB-exclusivo
+    const sysPrompt = buildSystemPrompt(tenant, kbContext, hasKb, summary);
+
+    // 5. Montar mensagens
     const messages = [
       { role: 'system', content: sysPrompt },
-      ...history,
+      ...recentHistory,
       { role: 'user',   content: userText },
     ];
 
-    const model = selectModel(userText, !!kbContext.trim(), history.length);
+    const model = selectModel(userText, hasKb && !!kbContext.trim(), recentHistory.length);
 
     console.log(
       `[Groq] model=${model === MODEL_FAST ? 'FAST(8B)' : 'STRONG(70B)'} ` +
-      `| kb=${!!kbContext.trim()} | hist=${history.length} | chars=${userText.length}`
+      `| hasKb=${hasKb} relevante=${hasRelevantContent} ` +
+      `| hist=${recentHistory.length}${summary ? '+resumo' : ''} ` +
+      `| chars=${userText.length}`
     );
 
     const completion = await groq.chat.completions.create({
       model,
       messages,
-      temperature: model === MODEL_FAST ? 0.3 : 0.5,
-      max_tokens:  model === MODEL_FAST ? 256  : 512,
+      temperature:       model === MODEL_FAST ? 0.2 : 0.4,
+      max_tokens:        model === MODEL_FAST ? 256  : 512,
+      frequency_penalty: 0.6,   // reduz repetição de frases/tokens no output
+      presence_penalty:  0.4,   // incentiva diversidade de conteúdo
     });
 
     return completion.choices[0]?.message?.content?.trim() || fallbackReply(userText, tenant);
@@ -339,7 +504,7 @@ async function generateGroqReply(userText, tenant, previousMsgs = [], KnowledgeB
 }
 
 // ─────────────────────────────────────────────────────────────
-// 8. FALLBACK (sem API)
+// 9. FALLBACK (sem API key configurada)
 // ─────────────────────────────────────────────────────────────
 
 function fallbackReply(userText, tenant) {
@@ -347,24 +512,24 @@ function fallbackReply(userText, tenant) {
   const welcome = tenant?.welcome_message || 'Como posso ajudar?';
   const agent   = tenant?.agent_name     || 'Assistente';
 
-  if (/ol[aá]|^oi\b|hello/.test(lower))                              return `${welcome} Sou ${agent}. Em que posso ajudar?`;
-  if (/pagamento|fatura|boleto/.test(lower))                         return 'Para consultar pagamentos ou emitir faturas, entre em contato com nossa equipe ou acesse o portal do cliente.';
-  if (/agendamento|hor[aá]rio/.test(lower))                          return 'Posso ajudar com agendamentos! Por favor, informe a data e o serviço desejado.';
+  if (/ol[aá]|^oi\b|hello/.test(lower))            return `${welcome} Sou ${agent}. Em que posso ajudar?`;
+  if (/pagamento|fatura|boleto/.test(lower))        return 'Para consultar pagamentos ou emitir faturas, entre em contato com nossa equipe ou acesse o portal do cliente.';
+  if (/agendamento|hor[aá]rio/.test(lower))         return 'Posso ajudar com agendamentos! Por favor, informe a data e o serviço desejado.';
   return 'Entendi! Pode me dar mais detalhes sobre sua necessidade? Farei o meu melhor para ajudar.';
 }
 
 // ─────────────────────────────────────────────────────────────
-// 9. UTILITÁRIO: INVALIDAR CACHE DE UM TENANT
-//    (chamar ao fazer upload de novo documento KB)
+// 10. UTILITÁRIOS DE CACHE
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Remove os chunks cacheados de um tenant para forçar reindexação
- * na próxima mensagem. Deve ser chamado na rota de upload de KB.
+ * Remove os chunks e resumos cacheados de um tenant para forçar
+ * reindexação na próxima mensagem. Chamado na rota de upload/delete de KB.
  */
 function invalidateTenantKbCache(tenantId) {
   chunkCache.delete(tenantId);
-  console.log(`[Groq] Cache KB invalidado para tenant=${tenantId}`);
+  summaryCache.delete(tenantId);
+  console.log(`[Groq] Cache KB+resumo invalidado para tenant=${tenantId}`);
 }
 
 module.exports = { generateGroqReply, invalidateTenantKbCache, buildKbContext };

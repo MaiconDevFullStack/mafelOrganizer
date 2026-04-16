@@ -31,10 +31,10 @@ const WORK_DAYS = [1, 2, 3, 4, 5, 6]; // Seg a Sáb
  * Chama o modelo leve (FAST) pois é uma extração estruturada simples.
  */
 async function extractServicesFromKB(Groq, tenant, KnowledgeBase) {
-  const { buildKbContext, MODEL_FAST } = require('./groqService');
+  const { buildKbContext } = require('./groqService');
 
   // Reusa buildKbContext interno — chama com query genérica
-  const kbText = await buildKbContext(KnowledgeBase, tenant.id, 'serviços disponíveis preços horários');
+  const { context: kbText } = await buildKbContext(KnowledgeBase, tenant.id, 'serviços disponíveis preços horários');
   if (!kbText.trim()) return [];
 
   const apiKey = process.env.GROQ_API_KEY;
