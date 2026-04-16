@@ -329,7 +329,7 @@
                   <td ng-bind="vm.recLbl(s.recurrence)"></td>
                   <td><span class="label" ng-class="vm.statusCls(s.status)" ng-bind="vm.statusLbl(s.status)"></span></td>
                   <td class="nowrap">
-                    <button class="btn btn-xs btn-info" ng-show="s.status==='active'" ng-click="vm.executeSchedule(s)" title="Executar cobrança">
+                    <button class="btn btn-xs btn-info" ng-click="vm.executeSchedule(s)" title="Executar cobrança">
                       <span class="glyphicon glyphicon-play"></span>
                     </button>
                     <button class="btn btn-xs btn-success" ng-show="s.client_phone" ng-click="vm.notifyWhatsApp(s)" title="Enviar lembrete via WhatsApp">
@@ -338,7 +338,7 @@
                     <button class="btn btn-xs btn-default" ng-click="vm.openPayModal('receivable', s)">
                       <span class="glyphicon glyphicon-pencil"></span>
                     </button>
-                    <button class="btn btn-xs btn-danger" ng-show="s.status==='active'" ng-click="vm.cancelSchedule(s)">
+                    <button class="btn btn-xs btn-danger" ng-click="vm.cancelSchedule(s)">
                       <span class="glyphicon glyphicon-remove"></span>
                     </button>
                   </td>
@@ -382,7 +382,7 @@
                   <td ng-bind="vm.recLbl(s.recurrence)"></td>
                   <td><span class="label" ng-class="vm.statusCls(s.status)" ng-bind="vm.statusLbl(s.status)"></span></td>
                   <td class="nowrap">
-                    <button class="btn btn-xs btn-success" ng-show="s.status==='active'" ng-click="vm.executeSchedule(s)" title="Marcar como pago">
+                    <button class="btn btn-xs btn-success" ng-click="vm.executeSchedule(s)" title="Marcar como pago">
                       <span class="glyphicon glyphicon-ok"></span>
                     </button>
                     <button class="btn btn-xs btn-success" ng-show="s.client_phone" ng-click="vm.notifyWhatsApp(s)" title="Enviar lembrete via WhatsApp">
@@ -391,7 +391,7 @@
                     <button class="btn btn-xs btn-default" ng-click="vm.openPayModal('payable', s)">
                       <span class="glyphicon glyphicon-pencil"></span>
                     </button>
-                    <button class="btn btn-xs btn-danger" ng-show="s.status==='active'" ng-click="vm.cancelSchedule(s)">
+                    <button class="btn btn-xs btn-danger" ng-click="vm.cancelSchedule(s)">
                       <span class="glyphicon glyphicon-remove"></span>
                     </button>
                   </td>
