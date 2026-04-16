@@ -95,6 +95,10 @@
         vm.cForm = {};
         vm.pForm = {};
 
+        /* ── Controle de staleness para evitar reloads desnecessários ── */
+        var _lastLoadAllTs = 0;
+        var LOAD_ALL_TTL   = 60000; // recarrega no máximo uma vez por minuto
+
         /* ── Inicialização ───────────────────────────────── */
         (function init() {
           if (!vm.tenantSlug) {
@@ -111,23 +115,32 @@
             })
             .finally(function () {
               vm.globalLoading = false;
-              loadAll();
+              loadAll(true); // primeira carga → força mesmo sem TTL
+              _refreshConvBadge();
             });
         })();
 
-        function loadAll() {
+        function loadAll(force) {
+          var now = Date.now();
+          if (!force && (now - _lastLoadAllTs) < LOAD_ALL_TTL) return; // dados ainda frescos
+          _lastLoadAllTs = now;
           loadKb();
           loadClients();
           loadPayments('receivable');
           loadPayments('payable');
           loadStats();
-          _refreshConvBadge();
         }
 
         // Atualiza apenas o contador do badge — chamado no init e a cada 30s
+        // Pausa automaticamente quando a aba está em segundo plano.
         var _badgeTimer;
         function _refreshConvBadge() {
           if (!vm.tenant || !vm.tenant.id) return;
+          if (document.hidden) {
+            // Aba oculta: reagenda sem fazer chamada de rede
+            _badgeTimer = $timeout(_refreshConvBadge, 30000);
+            return;
+          }
           $http.get(API + '/conversations', { params: { tenant_id: vm.tenant.id, status: 'open' } })
             .then(function (r) {
               vm.openConvCount = r.data.length;
@@ -145,7 +158,7 @@
           if (sec === 'kb')         loadKb();
           if (sec === 'receivable') loadPayments('receivable');
           if (sec === 'payable')    loadPayments('payable');
-          if (sec === 'dashboard')  { loadAll(); }
+          if (sec === 'dashboard')  { loadAll(); } // respeitará TTL de 60s
           if (sec === 'conversations') vm.loadConversations();
           if (sec === 'profile')    vm.loadProfile();
         };
@@ -569,6 +582,13 @@
         };
 
         function _fetchMessages(convId) {
+          // Não faz chamada de rede se a aba está oculta — reagenda e aguarda
+          if (document.hidden) {
+            if (vm.activeConv && vm.activeConv.id === convId) {
+              _convPollTimer = $timeout(function () { _fetchMessages(convId); }, 5000);
+            }
+            return;
+          }
           $http.get(API + '/conversations/' + convId + '/messages')
             .then(function (r) {
               vm.convMessages = r.data.messages || [];

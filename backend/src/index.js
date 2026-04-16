@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
 const { sequelize } = require('./models');
@@ -20,6 +21,7 @@ const whatsappRouter      = require('./routes/whatsapp');
 const app = express();
 
 // ── Segurança e middlewares globais ──────────────────────────
+app.use(compression());          // gzip em todas as respostas
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({
   origin: process.env.CORS_ORIGIN || '*',
@@ -28,7 +30,8 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
-app.use(morgan('dev'));
+// Log verboso apenas em desenvolvimento
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'tiny' : 'dev'));
 
 // Rate limiting global
 app.use(rateLimit({
@@ -87,7 +90,10 @@ app.listen(PORT, '0.0.0.0', () => {
   try {
     await sequelize.authenticate();
     console.log('✅  Banco de dados conectado.');
-    await sequelize.sync({ alter: true });
+    // alter:true compara e executa ALTERs no PostgreSQL a cada reinício — muito lento.
+    // Em produção usamos sync() sem alter; para aplicar mudanças de schema use migrations.
+    const syncOptions = process.env.NODE_ENV === 'production' ? {} : { alter: true };
+    await sequelize.sync(syncOptions);
     console.log('✅  Models sincronizados.');
     dbReady = true;
 

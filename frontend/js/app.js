@@ -407,14 +407,17 @@
         }
       });
 
-      // Auto-resize do textarea
+      // Auto-resize do textarea — debounce para não enfileirar $timeouts a cada tecla
+      var _resizeTimer = null;
       $scope.$watch(function () { return vm.inputText; }, function () {
-        $timeout(function () {
+        if (_resizeTimer) $timeout.cancel(_resizeTimer);
+        _resizeTimer = $timeout(function () {
+          _resizeTimer = null;
           var el = document.getElementById('chatInput');
           if (!el) return;
           el.style.height = 'auto';
           el.style.height = Math.min(el.scrollHeight, 120) + 'px';
-        });
+        }, 30); // 30ms de debounce
       });
 
       // Inicializar ao carregar
