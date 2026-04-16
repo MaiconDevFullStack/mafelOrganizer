@@ -161,6 +161,7 @@
           if (sec === 'dashboard')  { loadAll(); } // respeitará TTL de 60s
           if (sec === 'conversations') vm.loadConversations();
           if (sec === 'profile')    vm.loadProfile();
+          if (sec === 'slots')      loadSlots();
         };
 
         vm.sectionTitle = function () {
@@ -168,6 +169,7 @@
             dashboard:     'Dashboard',
             kb:            'Base de Conhecimento',
             clients:       'Clientes',
+            slots:         'Horários de Atendimento',
             conversations: 'Conversas',
             receivable:    'Contas a Receber',
             payable:       'Contas a Pagar',
@@ -308,6 +310,70 @@
               loadStats();
             })
             .catch(function () { notify('Erro ao remover cliente.', 'error'); });
+        };
+
+        /* ── Horários de Atendimento (Service Slots) ─────────── */
+        vm.slots      = [];
+        vm.slotForm   = {};
+        vm.savingSlot = false;
+
+        var DAY_NAMES = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+        vm.dayLabel = function (d) { return DAY_NAMES[d] || d; };
+
+        function loadSlots() {
+          if (!vm.tenant || !vm.tenant.id) return;
+          $http.get(API + '/scheduling/slots', { params: { tenant_id: vm.tenant.id } })
+            .then(function (r) { vm.slots = r.data; })
+            .catch(function () { notify('Erro ao carregar horários.', 'error'); });
+        }
+
+        vm.openSlotModal = function (slot) {
+          if (slot) {
+            vm.slotForm = angular.copy(slot);
+            vm.slotForm.day_of_week = String(vm.slotForm.day_of_week);
+          } else {
+            vm.slotForm = {
+              day_of_week:      '1',
+              start_time:       '09:00',
+              duration_minutes: 60,
+              max_bookings:     1,
+              service_name:     '',
+              is_active:        true,
+            };
+          }
+          angular.element('#slotModal').modal('show');
+        };
+
+        vm.saveSlot = function () {
+          if (!vm.slotForm.start_time) {
+            notify('Informe o horário de início.', 'error'); return;
+          }
+          vm.savingSlot = true;
+          var payload = angular.copy(vm.slotForm);
+          payload.day_of_week = parseInt(payload.day_of_week, 10);
+          payload.tenant_id   = vm.tenant.id;
+
+          var req = payload.id
+            ? $http.patch(API + '/scheduling/slots/' + payload.id, payload)
+            : $http.post(API + '/scheduling/slots', payload);
+
+          req.then(function () {
+              notify('Horário salvo!', 'success');
+              angular.element('#slotModal').modal('hide');
+              loadSlots();
+            })
+            .catch(function () { notify('Erro ao salvar horário.', 'error'); })
+            .finally(function () { vm.savingSlot = false; });
+        };
+
+        vm.deleteSlot = function (s) {
+          if (!confirm('Remover este horário?')) return;
+          $http.delete(API + '/scheduling/slots/' + s.id)
+            .then(function () {
+              vm.slots = vm.slots.filter(function (x) { return x.id !== s.id; });
+              notify('Horário removido.', 'info');
+            })
+            .catch(function () { notify('Erro ao remover horário.', 'error'); });
         };
 
         /* ── Autocomplete de clientes no modal de pagamento ────── */

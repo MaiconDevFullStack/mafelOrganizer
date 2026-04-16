@@ -11,15 +11,8 @@
 const { Op }          = require('sequelize');
 const { notifyProvider } = require('./whatsappService');
 
-// ── Configuração de horários padrão ────────────────────────────
-const WORK_START  = 8;    // hora de início (inclusive)
-const WORK_END    = 18;   // hora de fim (exclusive)
-const SLOT_HOURS  = 1;    // duração de cada slot em horas
-const DAYS_AHEAD  = 7;    // quantos dias à frente gerar slots
-const MAX_SLOTS   = 10;   // limite de slots retornados ao cliente
-
-// Dias da semana de trabalho (0=Dom, 1=Seg … 6=Sáb)
-const WORK_DAYS = [1, 2, 3, 4, 5, 6]; // Seg a Sáb
+const DAYS_AHEAD = 14;  // quantos dias à frente verificar slots
+const MAX_SLOTS  = 10;  // limite de slots retornados ao cliente
 
 // ─────────────────────────────────────────────────────────────
 // 1. BUSCA SERVIÇOS NA BASE DE CONHECIMENTO (via Groq)
@@ -70,19 +63,28 @@ async function extractServicesFromKB(Groq, tenant, KnowledgeBase) {
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Gera slots de DAYS_AHEAD dias, filtra os já ocupados via DB.
+ * Gera slots disponíveis consultando a tabela service_slots do tenant.
  *
- * @param {Object} Appointment – model Sequelize
+ * @param {Object} Appointment  – model Sequelize
+ * @param {Object} ServiceSlot  – model Sequelize
  * @param {string} tenantId
- * @returns {Array<Date>} slots livres
+ * @returns {Array<{date: Date, service_name: string|null, duration_minutes: number}>}
  */
-async function generateAvailableSlots(Appointment, tenantId) {
-  const now     = new Date();
-  const cutoff  = new Date(now.getTime() + 60 * 60 * 1000); // 1h no futuro mínimo
-  const end     = new Date(now);
+async function generateAvailableSlots(Appointment, ServiceSlot, tenantId) {
+  const now    = new Date();
+  const cutoff = new Date(now.getTime() + 60 * 60 * 1000); // mínimo 1h no futuro
+  const end    = new Date(now);
   end.setDate(end.getDate() + DAYS_AHEAD + 1);
 
-  // Busca slots já ocupados no período
+  // Busca configuração de slots ativos do tenant
+  const serviceSlots = await ServiceSlot.findAll({
+    where: { tenant_id: tenantId, is_active: true },
+    order: [['day_of_week', 'ASC'], ['start_time', 'ASC']],
+  });
+
+  if (!serviceSlots.length) return [];
+
+  // Conta agendamentos no período para calcular max_bookings
   const booked = await Appointment.findAll({
     where: {
       tenant_id: tenantId,
@@ -92,30 +94,43 @@ async function generateAvailableSlots(Appointment, tenantId) {
     attributes: ['scheduled_at'],
   });
 
-  const bookedSet = new Set(
-    booked.map(a => new Date(a.scheduled_at).toISOString())
-  );
+  // Mapa: isoString -> contagem de agendamentos
+  const bookingCounts = new Map();
+  for (const a of booked) {
+    const key = new Date(a.scheduled_at).toISOString();
+    bookingCounts.set(key, (bookingCounts.get(key) || 0) + 1);
+  }
 
   const slots = [];
-  const cursor = new Date(now);
-  cursor.setMinutes(0, 0, 0);
-  cursor.setHours(cursor.getHours() + 1); // começa na próxima hora cheia
 
-  while (slots.length < MAX_SLOTS && cursor < end) {
-    const dayOfWeek = cursor.getDay();
-    const hour      = cursor.getHours();
+  // Itera pelos próximos DAYS_AHEAD dias
+  for (let d = 0; d <= DAYS_AHEAD && slots.length < MAX_SLOTS; d++) {
+    const day = new Date(now);
+    day.setDate(day.getDate() + d);
+    const dayOfWeek = day.getDay();
 
-    if (
-      WORK_DAYS.includes(dayOfWeek) &&
-      hour >= WORK_START &&
-      hour < WORK_END &&
-      cursor > cutoff &&
-      !bookedSet.has(cursor.toISOString())
-    ) {
-      slots.push(new Date(cursor));
+    // Filtra slots configurados para este dia da semana
+    const daySlots = serviceSlots.filter(s => s.day_of_week === dayOfWeek);
+
+    for (const ss of daySlots) {
+      if (slots.length >= MAX_SLOTS) break;
+
+      const [hh, mm] = ss.start_time.split(':').map(Number);
+      const slotDate = new Date(day);
+      slotDate.setHours(hh, mm, 0, 0);
+
+      if (slotDate <= cutoff) continue; // muito próximo
+
+      const key   = slotDate.toISOString();
+      const count = bookingCounts.get(key) || 0;
+      if (count < (ss.max_bookings || 1)) {
+        slots.push({
+          date:             slotDate,
+          service_name:     ss.service_name || null,
+          duration_minutes: ss.duration_minutes || 60,
+        });
+      }
     }
-
-    cursor.setHours(cursor.getHours() + SLOT_HOURS);
   }
 
   return slots;
@@ -126,14 +141,16 @@ async function generateAvailableSlots(Appointment, tenantId) {
 // ─────────────────────────────────────────────────────────────
 
 function formatSlots(slots) {
-  return slots.map((dt, i) => {
+  return slots.map((slot, i) => {
+    const dt      = slot.date || slot; // compatível com Date simples
     const dateStr = dt.toLocaleDateString('pt-BR', {
       weekday: 'short', day: '2-digit', month: '2-digit',
     });
     const timeStr = dt.toLocaleTimeString('pt-BR', {
       hour: '2-digit', minute: '2-digit',
     });
-    return `${i + 1}. ${dateStr} às ${timeStr}`;
+    const svcStr  = slot.service_name ? ` — ${slot.service_name}` : '';
+    return `${i + 1}. ${dateStr} às ${timeStr}${svcStr}`;
   });
 }
 
@@ -198,7 +215,7 @@ async function createAppointment(data, tenant, Appointment, User) {
  * @returns {Object} { reply: string, nextStep: string, sessionUpdate: Object, appointment?: Object }
  */
 async function processSchedulingStep(step, payload, session, tenant, models) {
-  const { Appointment, KnowledgeBase, User } = models;
+  const { Appointment, KnowledgeBase, User, ServiceSlot } = models;
   const Groq = require('groq-sdk');
 
   switch (step) {
@@ -245,7 +262,7 @@ async function processSchedulingStep(step, payload, session, tenant, models) {
         };
       }
 
-      const slots = await generateAvailableSlots(Appointment, tenant.id);
+      const slots = await generateAvailableSlots(Appointment, ServiceSlot, tenant.id);
       if (!slots.length) {
         return {
           reply: 'Poxa, não encontrei horários disponíveis nos próximos dias. Por favor, entre em contato diretamente para verificar a agenda.',
@@ -261,14 +278,25 @@ async function processSchedulingStep(step, payload, session, tenant, models) {
         reply:
           `Horários disponíveis:\n\n${slotsText}\n\nDigite o **número** do horário desejado:`,
         nextStep:      'select_slot',
-        sessionUpdate: { client_phone: phone, slots: slots.map(s => s.toISOString()) },
+        sessionUpdate: {
+          client_phone: phone,
+          slots: slots.map(s => ({
+            date:             s.date.toISOString(),
+            service_name:     s.service_name,
+            duration_minutes: s.duration_minutes,
+          })),
+        },
       };
     }
 
     // ── SELECT_SLOT: cria agendamento ─────────────────────────
     case 'select_slot': {
       const choice   = parseInt((payload.text || '').trim(), 10);
-      const slotList = (session.slots || []).map(s => new Date(s));
+      const slotList = (session.slots || []).map(s =>
+        typeof s === 'object' && s.date
+          ? { date: new Date(s.date), service_name: s.service_name, duration_minutes: s.duration_minutes }
+          : { date: new Date(s), service_name: null, duration_minutes: 60 }
+      );
 
       if (isNaN(choice) || choice < 1 || choice > slotList.length) {
         const lines = formatSlots(slotList);
@@ -280,7 +308,7 @@ async function processSchedulingStep(step, payload, session, tenant, models) {
       }
 
       const chosen      = slotList[choice - 1];
-      const serviceName = (session.services || [])[0] || null;
+      const serviceName = chosen.service_name || (session.services || [])[0] || null;
 
       const { appointment } = await createAppointment(
         {
@@ -289,17 +317,17 @@ async function processSchedulingStep(step, payload, session, tenant, models) {
           client_name:     session.client_name,
           client_phone:    session.client_phone,
           service_name:    serviceName,
-          scheduled_at:    chosen,
+          scheduled_at:    chosen.date,
         },
         tenant,
         Appointment,
         User
       );
 
-      const dtStr = chosen.toLocaleDateString('pt-BR', {
+      const dtStr = chosen.date.toLocaleDateString('pt-BR', {
         weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric',
       });
-      const tmStr = chosen.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      const tmStr = chosen.date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
       return {
         reply:

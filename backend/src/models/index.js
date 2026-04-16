@@ -25,6 +25,7 @@ const modelFiles = [
   require('./Client'),
   require('./KnowledgeBase'),
   require('./Appointment'),
+  require('./ServiceSlot'),
 ];
 
 modelFiles.forEach((defineModel) => {

@@ -9,6 +9,7 @@ module.exports = (sequelize, DataTypes) => {
       Tenant.hasMany(models.PaymentSchedule, { foreignKey: 'tenant_id', as: 'paymentSchedules' });
       Tenant.hasMany(models.Subscription, { foreignKey: 'tenant_id', as: 'subscriptions' });
       Tenant.hasMany(models.Appointment, { foreignKey: 'tenant_id', as: 'appointments' });
+      Tenant.hasMany(models.ServiceSlot, { foreignKey: 'tenant_id', as: 'serviceSlots' });
     }
   }
 

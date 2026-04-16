@@ -30,8 +30,9 @@
       </a>
       <a class="adm-nav-item" ng-class="{active: vm.section==='clients'}" ng-click="vm.go('clients')">
         <span class="glyphicon glyphicon-user"></span><span>Clientes</span>
-      </a>
-      <a class="adm-nav-item" ng-class="{active: vm.section==='conversations'}" ng-click="vm.go('conversations')">
+      </a>      <a class="adm-nav-item" ng-class="{active: vm.section==='slots'}" ng-click="vm.go('slots')">
+        <span class="glyphicon glyphicon-time"></span><span>Hor&aacute;rios</span>
+      </a>      <a class="adm-nav-item" ng-class="{active: vm.section==='conversations'}" ng-click="vm.go('conversations')">
         <span class="glyphicon glyphicon-comment"></span><span>Conversas</span>
         <span class="adm-nav-badge" ng-show="vm.openConvCount > 0" ng-bind="vm.openConvCount"></span>
       </a>
@@ -290,6 +291,133 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ HORÁRIOS DE ATENDIMENTO ═══════════════════════════ -->
+      <div ng-show="vm.section==='slots'">
+
+        <div class="adm-toolbar">
+          <div></div>
+          <button class="btn btn-success" ng-click="vm.openSlotModal(null)">
+            <span class="glyphicon glyphicon-plus"></span> Novo Horário
+          </button>
+        </div>
+
+        <div class="adm-card" style="margin-bottom:20px">
+          <div class="adm-card-header">
+            <span class="glyphicon glyphicon-time"></span> Horários Cadastrados
+            <span class="text-muted" style="font-size:12px;margin-left:8px">
+              (os clientes veem esses horários ao iniciar um agendamento)
+            </span>
+          </div>
+          <div class="adm-card-body" style="padding:0">
+            <div ng-show="!vm.slots.length" class="adm-empty" style="padding:32px">
+              Nenhum horário cadastrado. Clique em <strong>Novo Horário</strong> para começar.
+            </div>
+            <div class="table-responsive" ng-show="vm.slots.length">
+              <table class="table adm-table">
+                <thead><tr>
+                  <th>Dia</th><th>Início</th><th>Duração</th><th>Serviço</th>
+                  <th>Máx. vagas</th><th>Status</th><th>Ações</th>
+                </tr></thead>
+                <tbody>
+                  <tr ng-repeat="s in vm.slots | orderBy:['day_of_week','start_time']">
+                    <td ng-bind="vm.dayLabel(s.day_of_week)"></td>
+                    <td ng-bind="s.start_time"></td>
+                    <td>{{s.duration_minutes}} min</td>
+                    <td ng-bind="s.service_name || '—'"></td>
+                    <td ng-bind="s.max_bookings"></td>
+                    <td>
+                      <span class="label" ng-class="s.is_active ? 'label-success' : 'label-default'">
+                        {{s.is_active ? 'Ativo' : 'Inativo'}}
+                      </span>
+                    </td>
+                    <td class="nowrap">
+                      <button class="btn btn-xs btn-default" ng-click="vm.openSlotModal(s)">
+                        <span class="glyphicon glyphicon-pencil"></span>
+                      </button>
+                      <button class="btn btn-xs btn-danger" ng-click="vm.deleteSlot(s)">
+                        <span class="glyphicon glyphicon-trash"></span>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal de horário -->
+        <div class="modal fade" id="slotModal" tabindex="-1">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+                <h4 class="modal-title">{{vm.slotForm.id ? 'Editar' : 'Novo'}} Horário</h4>
+              </div>
+              <div class="modal-body">
+                <div class="row">
+                  <div class="col-xs-6">
+                    <div class="form-group">
+                      <label>Dia da Semana <span class="text-danger">*</span></label>
+                      <select class="form-control" ng-model="vm.slotForm.day_of_week">
+                        <option value="0">Domingo</option>
+                        <option value="1">Segunda</option>
+                        <option value="2">Terça</option>
+                        <option value="3">Quarta</option>
+                        <option value="4">Quinta</option>
+                        <option value="5">Sexta</option>
+                        <option value="6">Sábado</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="col-xs-6">
+                    <div class="form-group">
+                      <label>Horário de Início <span class="text-danger">*</span></label>
+                      <input type="time" class="form-control" ng-model="vm.slotForm.start_time" />
+                    </div>
+                  </div>
+                </div>
+                <div class="row">
+                  <div class="col-xs-6">
+                    <div class="form-group">
+                      <label>Duração (minutos)</label>
+                      <input type="number" class="form-control" ng-model="vm.slotForm.duration_minutes"
+                             min="15" max="480" placeholder="60" />
+                    </div>
+                  </div>
+                  <div class="col-xs-6">
+                    <div class="form-group">
+                      <label>Máx. vagas simultâneas</label>
+                      <input type="number" class="form-control" ng-model="vm.slotForm.max_bookings"
+                             min="1" max="99" placeholder="1" />
+                    </div>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Nome do Serviço (opcional)</label>
+                  <input type="text" class="form-control" ng-model="vm.slotForm.service_name"
+                         placeholder="Ex: Corte de cabelo" />
+                </div>
+                <div class="form-group">
+                  <label>
+                    <input type="checkbox" ng-model="vm.slotForm.is_active" />
+                    Horário ativo
+                  </label>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" ng-click="vm.saveSlot()"
+                        ng-disabled="vm.savingSlot">
+                  <span class="glyphicon"
+                        ng-class="vm.savingSlot ? 'glyphicon-refresh adm-spin' : 'glyphicon-floppy-disk'"></span>
+                  {{vm.savingSlot ? 'Salvando…' : 'Salvar'}}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
