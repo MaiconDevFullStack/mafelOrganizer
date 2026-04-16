@@ -15,10 +15,10 @@ const clientSchema = Joi.object({
   is_active: Joi.boolean().default(true),
 });
 
-const updateSchema = clientSchema.fork(
-  ['tenant_id', 'name'],
-  (field) => field.optional()
-);
+const updateSchema = clientSchema
+  .fork(['tenant_id', 'name'], (field) => field.optional())
+  // O frontend envia o objeto completo (incluindo id) — ignoramos sem erro
+  .keys({ id: Joi.string().uuid().optional() });
 
 // GET /api/clients?tenant_id=...&search=...
 router.get('/', async (req, res) => {
