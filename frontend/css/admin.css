@@ -361,8 +361,9 @@ input[type="date"].form-control {
   max-width: 520px;
   pointer-events: all;
   animation: modal-in .2s ease;
-  max-height: 90vh;
+  max-height: 90dvh;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .adm-modal-lg { max-width: 700px; }
 @keyframes modal-in { from { transform: scale(.94) translateY(8px); opacity: 0; } }
@@ -590,9 +591,20 @@ input[type="date"].form-control {
   /* Upload: empilha colunas */
   .adm-card-body .row [class*="col-sm-"] { width: 100%; float: none; }
 
-  /* Modal */
-  .adm-modal { padding: 10px; align-items: flex-end; }
-  .adm-modal-box { max-width: 100%; border-radius: 16px 16px 0 0; max-height: 95vh; }
+  /* Modal — evita corte no topo em mobile:
+     troca bottom-sheet por container rolável alinhado ao topo,
+     com respeito ao safe-area-inset (notch/dynamic island) */
+  .adm-modal {
+    padding: max(env(safe-area-inset-top), 16px) 12px 16px;
+    align-items: flex-start;
+    overflow-y: auto;
+  }
+  .adm-modal-box {
+    max-width: 100%;
+    border-radius: 12px;
+    max-height: none;      /* deixa o container controlar o scroll */
+    margin: auto 0;        /* distribui espaço sobrando na base */
+  }
   .adm-modal-lg  { max-width: 100%; }
   .adm-modal-body { padding: 14px; }
   .adm-modal-foot { padding: 10px 14px; flex-wrap: wrap; gap: 8px; }
