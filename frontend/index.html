@@ -125,15 +125,6 @@
 
       </div>
 
-      <!-- ── SUGESTÕES RÁPIDAS ───────────────────────────────── -->
-      <div class="quick-replies" ng-if="vm.messages.length === 0 && vm.quickReplies.length > 0">
-        <button class="btn quick-reply-btn"
-                ng-repeat="qr in vm.quickReplies"
-                ng-style="{'border-color': vm.tenant.primary_color || '#2563eb', 'color': vm.tenant.primary_color || '#2563eb'}"
-                ng-click="vm.sendQuickReply(qr)">
-          {{qr}}
-        </button>
-      </div>
       <!-- ── BOTÃO CONTRATAR SERVIÇO ───────────────────────── -->
       <div class="booking-action-bar" ng-if="!vm.bookingStep">
         <button class="btn booking-cta-btn"

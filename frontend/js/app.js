@@ -98,14 +98,6 @@
       vm.bookingStep    = null;
       vm.bookingSession = {};
 
-      // Respostas rápidas padrão
-      vm.quickReplies = [
-        'Consultar pagamento',
-        'Agendar cobrança',
-        'Falar com atendente',
-        'Dúvidas sobre serviços',
-      ];
-
       // ── Inicialização ────────────────────────────────────────
       vm.init = function () {
         var info = CONFIG.getTenantInfo();
@@ -225,12 +217,6 @@
           .finally(function () {
             vm.isSending = false;
           });
-      };
-
-      // ── Resposta rápida ──────────────────────────────────────
-      vm.sendQuickReply = function (text) {
-        vm.inputText = text;
-        vm.sendMessage();
       };
 
       // ── Iniciar fluxo de agendamento ─────────────────────────
