@@ -838,20 +838,6 @@
             </div>
           </div>
 
-          <!-- Horário do envio automático -->
-          <div class="col-sm-4">
-            <div class="form-group">
-              <label>
-                <span class="glyphicon glyphicon-time" style="margin-right:4px"></span>
-                Horário da cobrança
-                <small class="text-muted">(envio automático)</small>
-              </label>
-              <input type="time" class="form-control" ng-model="vm.pForm.notify_time"
-                     placeholder="HH:MM" />
-              <span class="help-block" style="font-size:11px">Deixe em branco para não enviar automaticamente.</span>
-            </div>
-          </div>
-
           <div class="col-sm-4" ng-show="!vm.pForm.is_recurring">
             <div class="form-group">
               <label>Recorrência</label>
@@ -861,6 +847,21 @@
                 <option value="monthly">Mensal</option>
                 <option value="yearly">Anual</option>
               </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Horário do envio automático ────────────────────── -->
+        <div class="row">
+          <div class="col-sm-4">
+            <div class="form-group">
+              <label>
+                <span class="glyphicon glyphicon-time" style="margin-right:4px"></span>
+                Horário da cobrança
+                <small class="text-muted">(envio automático)</small>
+              </label>
+              <input type="time" class="form-control" ng-model="vm.pForm.notify_time" />
+              <span class="help-block" style="font-size:11px">Deixe em branco para não enviar automaticamente.</span>
             </div>
           </div>
         </div>
