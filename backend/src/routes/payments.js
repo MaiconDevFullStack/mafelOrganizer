@@ -124,9 +124,6 @@ router.post('/schedules/:id/execute', async (req, res) => {
   try {
     const schedule = await PaymentSchedule.findByPk(req.params.id);
     if (!schedule) return res.status(404).json({ error: 'Agendamento não encontrado' });
-    if (schedule.status !== 'active') {
-      return res.status(400).json({ error: 'Agendamento não está ativo' });
-    }
 
     const transaction = await Transaction.create({
       schedule_id: schedule.id,
@@ -152,6 +149,9 @@ router.post('/schedules/:id/execute', async (req, res) => {
 
       if (schedule.recurrence === 'once') {
         await schedule.update({ status: 'completed' });
+      } else {
+        // Recorrentes voltam para active após execução manual
+        await schedule.update({ status: 'active' });
       }
 
       return res.json({ status: 'success', transaction, invoice });

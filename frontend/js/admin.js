@@ -472,7 +472,7 @@
               loadPayments(s.type);
               loadStats();
             })
-            .catch(function () { notify('Erro ao executar.', 'error'); });
+            .catch(function (e) { notify(e.data && e.data.error ? e.data.error : 'Erro ao executar.', 'error'); });
         };
 
         vm.cancelSchedule = function (s) {
