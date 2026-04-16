@@ -3,9 +3,14 @@
 /**
  * whatsappService.js
  *
- * Suporta três providers, escolhidos por WHATSAPP_PROVIDER no .env:
+ * Suporta quatro providers, escolhidos por WHATSAPP_PROVIDER no .env:
  *
- *   WHATSAPP_PROVIDER=twilio      (Twilio WhatsApp — produção aprovada)
+ *   WHATSAPP_PROVIDER=sms         (Twilio SMS — número aprovado para SMS)
+ *     TWILIO_ACCOUNT_SID          SID da conta Twilio
+ *     TWILIO_AUTH_TOKEN           Token de autenticação
+ *     TWILIO_SMS_FROM             Número aprovado: +15559403012
+ *
+ *   WHATSAPP_PROVIDER=twilio      (Twilio WhatsApp — número aprovado WhatsApp)
  *     TWILIO_ACCOUNT_SID          SID da conta Twilio
  *     TWILIO_AUTH_TOKEN           Token de autenticação
  *     TWILIO_WHATSAPP_FROM        Número aprovado: whatsapp:+5511XXXXXXXXX
@@ -73,6 +78,39 @@ async function withRetry(fn, attempts = RETRY_ATTEMPTS, delayMs = RETRY_DELAY_MS
     }
   }
   throw lastErr;
+}
+
+// ─────────────────────────────────────────────────────────────
+// PROVIDER: TWILIO SMS
+// ─────────────────────────────────────────────────────────────
+
+function smsConfigured() {
+  return !!(process.env.TWILIO_ACCOUNT_SID &&
+            process.env.TWILIO_AUTH_TOKEN  &&
+            process.env.TWILIO_SMS_FROM);
+}
+
+async function sendViaSms(phone, text) {
+  const client = Twilio(
+    process.env.TWILIO_ACCOUNT_SID,
+    process.env.TWILIO_AUTH_TOKEN
+  );
+  const from = process.env.TWILIO_SMS_FROM; // ex: +15559403012
+  const to   = `+${phone}`;
+
+  const message = await client.messages.create({ from, to, body: text });
+  return { sid: message.sid, status: message.status, to: message.to };
+}
+
+async function smsStatus() {
+  if (!smsConfigured()) return { configured: false, provider: 'sms' };
+  try {
+    const client = Twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+    const account = await client.api.accounts(process.env.TWILIO_ACCOUNT_SID).fetch();
+    return { configured: true, provider: 'sms', account: account.friendlyName, status: account.status, from: process.env.TWILIO_SMS_FROM };
+  } catch (err) {
+    return { configured: false, provider: 'sms', error: err.message };
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -244,6 +282,11 @@ async function sendWhatsApp(toPhone, text) {
   const phone = normalizePhone(toPhone);
 
   // ── Modo simulação ──────────────────────────────────────────
+  if (PROVIDER === 'sms' && !smsConfigured()) {
+    console.warn('[WhatsApp] SMS (Twilio) não configurado → SIMULANDO envio.');
+    console.warn(`  Para: ${phone}\n  Texto: ${text}`);
+    return { simulated: true, provider: 'sms', to: phone };
+  }
   if (PROVIDER === 'twilio' && !twilioConfigured()) {
     console.warn('[WhatsApp] Twilio não configurado → SIMULANDO envio.');
     console.warn(`  Para: ${phone}\n  Texto: ${text}`);
@@ -263,7 +306,10 @@ async function sendWhatsApp(toPhone, text) {
   // ── Envio real com retry ────────────────────────────────────
   try {
     let result;
-    if (PROVIDER === 'twilio') {
+    if (PROVIDER === 'sms') {
+      result = await withRetry(() => sendViaSms(phone, text));
+      console.log(`[SMS][Twilio] Enviado para ${phone}. SID: ${result.sid}`);
+    } else if (PROVIDER === 'twilio') {
       result = await withRetry(() => sendViaTwilio(phone, text));
       console.log(`[WhatsApp][Twilio] Enviado para ${phone}. SID: ${result.sid}`);
     } else if (PROVIDER === 'meta') {
@@ -320,6 +366,7 @@ async function notifyProvider(providerPhone, appointment, tenantName) {
 // ─────────────────────────────────────────────────────────────
 
 async function getStatus() {
+  if (PROVIDER === 'sms')        return smsStatus();
   if (PROVIDER === 'twilio')     return twilioStatus();
   if (PROVIDER === 'meta')       return metaStatus();
   if (PROVIDER === 'evolution')  return evolutionStatus();
