@@ -7,6 +7,7 @@
 body {
   margin: 0;
   min-height: 100vh;
+  min-height: 100dvh; /* desconta teclado virtual e barra do browser */
   font-family: 'Inter', sans-serif;
   display: flex;
   align-items: center;
@@ -14,6 +15,9 @@ body {
   background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%);
   background-size: 200% 200%;
   animation: gradientShift 10s ease infinite;
+  /* Impede scroll lateral quando teclado abre */
+  overflow-x: hidden;
+  width: 100%;
 }
 
 /* Tema roxo para superadmin */
@@ -31,7 +35,10 @@ body.superadmin-theme {
 .login-wrapper {
   width: 100%;
   max-width: 420px;
+  /* Garante que o card não ultrapasse a viewport em telas pequeníssimas */
+  max-width: min(420px, 100%);
   padding: 24px 16px;
+  box-sizing: border-box;
 }
 
 .login-card {
@@ -131,7 +138,8 @@ body.superadmin-theme {
   padding: 11px 12px 11px 38px;
   border: 1.5px solid #e5e7eb;
   border-radius: 10px;
-  font-size: 14px;
+  /* 16px previne zoom automático do iOS em inputs focados */
+  font-size: 16px;
   color: #111827;
   background: #f9fafb;
   outline: none;
@@ -302,6 +310,9 @@ body.superadmin-theme {
 
 /* ── Responsividade ──────────────────────────────────────── */
 @media (max-width: 480px) {
+  /* Previne qualquer overflow lateral na tela de login */
+  html, body { overflow-x: hidden; max-width: 100%; }
+
   /* Wrapper */
   .login-wrapper { padding: 16px 12px; }
 

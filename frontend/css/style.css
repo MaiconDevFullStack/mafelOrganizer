@@ -30,6 +30,9 @@ html, body {
   background: var(--bg-chat);
   color: var(--text-main);
   -webkit-font-smoothing: antialiased;
+  /* Impede scroll lateral ao abrir teclado virtual ou em qualquer overflow */
+  overflow-x: hidden;
+  max-width: 100%;
 }
 
 /* ── Splash Screen ─────────────────────────────────────────── */
@@ -49,8 +52,11 @@ html, body {
 .app-wrapper {
   position: relative;
   min-height: 100vh;
+  min-height: 100dvh; /* dinâmica: desconta teclado virtual e barra do browser */
   display: flex;
   flex-direction: column;
+  overflow-x: hidden; /* garante que nenhum filho extravase lateralmente */
+  width: 100%;
 }
 
 /* ── Fundo Customizável ────────────────────────────────────── */
@@ -159,7 +165,8 @@ html, body {
   max-width: 720px;
   width: 100%;
   margin: 0 auto;
-  height: calc(100vh - 64px);
+  height: calc(100vh - 64px);   /* fallback navegadores sem suporte a dvh */
+  height: calc(100dvh - 64px); /* dinâmica: encolhe quando teclado abre */
   transition: height 0.3s ease;
 }
 
@@ -394,7 +401,8 @@ html, body {
   /* Input */
   .input-area    { padding: 8px 8px 6px; }
   .input-wrapper { padding: 6px 6px 6px 12px; }
-  .chat-input    { font-size: 14px; }
+  /* font-size 16px impede o iOS de dar zoom automático no textarea */
+  .chat-input    { font-size: 16px; }
 
   /* Booking banner */
   .booking-mode-banner { margin: 0 6px 4px; padding: 5px 10px; font-size: 11px; }
@@ -405,6 +413,12 @@ html, body {
 @media (max-width: 480px) {
   /* Container ocupa tudo sem padding lateral */
   .chat-container { height: calc(100dvh - 58px); }
+
+  /* Garante que nenhum filho do chat extravase horizontalmente */
+  .messages-area, .input-area, .booking-action-bar, .booking-mode-banner {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
 
   /* Header: título menor, sem espaços desnecessários */
   .chat-header   { padding: 8px 10px; }

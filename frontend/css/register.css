@@ -8,16 +8,21 @@ body {
   font-family: 'Inter', sans-serif;
   background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 60%, #0f172a 100%);
   min-height: 100vh;
+  min-height: 100dvh; /* desconta teclado virtual */
   display: flex;
   align-items: flex-start;
   justify-content: center;
   padding: 32px 16px 48px;
+  /* Impede scroll lateral ao abrir teclado virtual */
+  overflow-x: hidden;
+  width: 100%;
 }
 
 /* ── Wrapper ── */
 .reg-wrapper {
   width: 100%;
-  max-width: 460px;
+  max-width: min(460px, 100%); /* não ultrapassa a viewport em telas estreitas */
+  box-sizing: border-box;
 }
 
 /* ── Card ── */
@@ -153,19 +158,24 @@ body {
 .input-wrap {
   position: relative;
 }
-.input-wrap input {
+.input-wrap input,
+.input-wrap select,
+.input-wrap textarea {
   width: 100%;
   padding: 10px 12px 10px 36px;
   border: 1.5px solid #d1d5db;
   border-radius: 9px;
-  font-size: 14px;
+  /* 16px previne zoom automático do iOS em inputs focados */
+  font-size: 16px;
   color: #111827;
   outline: none;
   transition: border-color .2s, box-shadow .2s;
   font-family: 'Inter', sans-serif;
   background: #fff;
 }
-.input-wrap input:focus {
+.input-wrap input:focus,
+.input-wrap select:focus,
+.input-wrap textarea:focus {
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37,99,235,.12);
 }
