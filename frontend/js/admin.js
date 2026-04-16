@@ -358,9 +358,11 @@
             // Garante tipos corretos (Sequelize retorna DECIMAL como string)
             s.amount        = s.amount        != null ? parseFloat(s.amount)        : null;
             s.recurring_day = s.recurring_day != null ? parseInt(s.recurring_day, 10) : null;
-            // Normaliza due_date para YYYY-MM-DD
+            // Converte due_date string "YYYY-MM-DD" para Date local
+            // (AngularJS input[type=date] exige objeto Date no ng-model)
             if (s.due_date && typeof s.due_date === 'string') {
-              s.due_date = s.due_date.substring(0, 10);
+              var dp = s.due_date.substring(0, 10).split('-');
+              s.due_date = new Date(parseInt(dp[0], 10), parseInt(dp[1], 10) - 1, parseInt(dp[2], 10));
             }
             // Normaliza notify_time para HH:MM
             if (s.notify_time && typeof s.notify_time === 'string') {
