@@ -20,7 +20,7 @@ const scheduleSchema = Joi.object({
   payment_method: Joi.string().valid('boleto', 'pix', 'credit_card', 'debit').default('pix'),
   notes:          Joi.string().optional().allow(null, ''),
   custom_message: Joi.string().max(500).optional().allow(null, ''),
-  notify_time:    Joi.string().pattern(/^([01]\d|2[0-3]):[0-5]\d$/).optional().allow(null, '')
+  notify_time:    Joi.string().pattern(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/).optional().allow(null, '')
     .messages({ 'string.pattern.base': 'Horário inválido. Use o formato HH:MM (ex: 09:00).' }),
 });
 
@@ -110,6 +110,8 @@ router.patch('/schedules/:id', async (req, res) => {
     ];
     const updates = {};
     allowed.forEach((k) => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
+    // Normaliza notify_time para HH:MM (cron compara nesse formato)
+    if (updates.notify_time) updates.notify_time = updates.notify_time.slice(0, 5);
     await schedule.update(updates);
     res.json(schedule);
   } catch (err) {
