@@ -121,6 +121,20 @@
           loadPayments('receivable');
           loadPayments('payable');
           loadStats();
+          _refreshConvBadge();
+        }
+
+        // Atualiza apenas o contador do badge — chamado no init e a cada 30s
+        var _badgeTimer;
+        function _refreshConvBadge() {
+          if (!vm.tenant || !vm.tenant.id) return;
+          $http.get(API + '/conversations', { params: { tenant_id: vm.tenant.id, status: 'open' } })
+            .then(function (r) {
+              vm.openConvCount = r.data.length;
+            })
+            .finally(function () {
+              _badgeTimer = $timeout(_refreshConvBadge, 30000);
+            });
         }
 
         /* ── Navegação ───────────────────────────────────── */
