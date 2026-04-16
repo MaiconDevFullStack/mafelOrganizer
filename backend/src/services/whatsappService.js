@@ -3,27 +3,33 @@
 /**
  * whatsappService.js
  *
- * Suporta dois providers, escolhidos por WHATSAPP_PROVIDER no .env:
+ * Suporta três providers, escolhidos por WHATSAPP_PROVIDER no .env:
  *
- *   WHATSAPP_PROVIDER=evolution   (padrão — Evolution API auto-hospedada)
- *     EVOLUTION_API_URL     ex: https://evolution.seuservidor.com
- *     EVOLUTION_API_KEY     chave da instância
- *     EVOLUTION_INSTANCE    nome da instância
+ *   WHATSAPP_PROVIDER=twilio      (Twilio WhatsApp — produção aprovada)
+ *     TWILIO_ACCOUNT_SID          SID da conta Twilio
+ *     TWILIO_AUTH_TOKEN           Token de autenticação
+ *     TWILIO_WHATSAPP_FROM        Número aprovado: whatsapp:+5511XXXXXXXXX
  *
  *   WHATSAPP_PROVIDER=meta        (WhatsApp Cloud API oficial da Meta)
  *     WHATSAPP_PHONE_ID     ID do número no Business Manager
  *     WHATSAPP_TOKEN        Token permanente ou de sistema
  *
+ *   WHATSAPP_PROVIDER=evolution   (Evolution API auto-hospedada)
+ *     EVOLUTION_API_URL     ex: https://evolution.seuservidor.com
+ *     EVOLUTION_API_KEY     chave da instância
+ *     EVOLUTION_INSTANCE    nome da instância
+ *
  * Se nenhuma variável estiver configurada, loga a mensagem em modo
  * simulação sem lançar erro (útil em desenvolvimento).
  */
 
-const axios = require('axios');
+const axios  = require('axios');
+const Twilio = require('twilio');
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTES
 // ─────────────────────────────────────────────────────────────
-const PROVIDER        = (process.env.WHATSAPP_PROVIDER || 'evolution').toLowerCase();
+const PROVIDER        = (process.env.WHATSAPP_PROVIDER || 'twilio').toLowerCase();
 const META_API_VER    = 'v19.0';
 const META_BASE_URL   = `https://graph.facebook.com/${META_API_VER}`;
 const RETRY_ATTEMPTS  = 3;
@@ -67,6 +73,48 @@ async function withRetry(fn, attempts = RETRY_ATTEMPTS, delayMs = RETRY_DELAY_MS
     }
   }
   throw lastErr;
+}
+
+// ─────────────────────────────────────────────────────────────
+// PROVIDER: TWILIO WHATSAPP
+// ─────────────────────────────────────────────────────────────
+
+function twilioConfigured() {
+  return !!(process.env.TWILIO_ACCOUNT_SID &&
+            process.env.TWILIO_AUTH_TOKEN  &&
+            process.env.TWILIO_WHATSAPP_FROM);
+}
+
+async function sendViaTwilio(phone, text) {
+  const client = Twilio(
+    process.env.TWILIO_ACCOUNT_SID,
+    process.env.TWILIO_AUTH_TOKEN
+  );
+  const from = process.env.TWILIO_WHATSAPP_FROM; // ex: whatsapp:+5511XXXXXXXXX
+  const to   = `whatsapp:+${phone}`;
+
+  const message = await client.messages.create({ from, to, body: text });
+  return { sid: message.sid, status: message.status, to: message.to };
+}
+
+async function twilioStatus() {
+  if (!twilioConfigured()) return { configured: false, provider: 'twilio' };
+  try {
+    const client = Twilio(
+      process.env.TWILIO_ACCOUNT_SID,
+      process.env.TWILIO_AUTH_TOKEN
+    );
+    const account = await client.api.accounts(process.env.TWILIO_ACCOUNT_SID).fetch();
+    return {
+      configured: true,
+      provider:   'twilio',
+      account:    account.friendlyName,
+      status:     account.status,
+      from:       process.env.TWILIO_WHATSAPP_FROM,
+    };
+  } catch (err) {
+    return { configured: true, provider: 'twilio', error: err.message };
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -196,6 +244,11 @@ async function sendWhatsApp(toPhone, text) {
   const phone = normalizePhone(toPhone);
 
   // ── Modo simulação ──────────────────────────────────────────
+  if (PROVIDER === 'twilio' && !twilioConfigured()) {
+    console.warn('[WhatsApp] Twilio não configurado → SIMULANDO envio.');
+    console.warn(`  Para: ${phone}\n  Texto: ${text}`);
+    return { simulated: true, provider: 'twilio', to: phone };
+  }
   if (PROVIDER === 'evolution' && !evolutionConfigured()) {
     console.warn('[WhatsApp] Evolution não configurada → SIMULANDO envio.');
     console.warn(`  Para: ${phone}\n  Texto: ${text}`);
@@ -210,7 +263,10 @@ async function sendWhatsApp(toPhone, text) {
   // ── Envio real com retry ────────────────────────────────────
   try {
     let result;
-    if (PROVIDER === 'meta') {
+    if (PROVIDER === 'twilio') {
+      result = await withRetry(() => sendViaTwilio(phone, text));
+      console.log(`[WhatsApp][Twilio] Enviado para ${phone}. SID: ${result.sid}`);
+    } else if (PROVIDER === 'meta') {
       result = await withRetry(() => sendViaMeta(phone, text));
       console.log(`[WhatsApp][Meta] Enviado para ${phone}.`);
     } else {
@@ -264,14 +320,51 @@ async function notifyProvider(providerPhone, appointment, tenantName) {
 // ─────────────────────────────────────────────────────────────
 
 async function getStatus() {
+  if (PROVIDER === 'twilio')     return twilioStatus();
   if (PROVIDER === 'meta')       return metaStatus();
   if (PROVIDER === 'evolution')  return evolutionStatus();
   return { configured: false, error: `Provider desconhecido: ${PROVIDER}` };
 }
 
+// ─────────────────────────────────────────────────────────────
+// NOTIFICAÇÃO DE COBRANÇA AO CLIENTE
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Envia lembrete de cobrança para o cliente via WhatsApp.
+ * @param {Object} schedule  – registro PaymentSchedule
+ * @param {string} tenantName
+ */
+async function notifyClientPayment(schedule, tenantName) {
+  const phone = schedule.client_phone;
+  if (!phone) {
+    console.warn('[WhatsApp] Cliente sem telefone. Notificação de cobrança ignorada.');
+    return { skipped: true };
+  }
+
+  const due    = new Date(schedule.due_date);
+  const dateStr = due.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' });
+  const amount  = parseFloat(schedule.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+  const text = [
+    `Olá, ${schedule.client_name}! 👋`,
+    ``,
+    `📋 *Lembrete de pagamento — ${tenantName || 'seu prestador'}*`,
+    ``,
+    `💰 *Valor:* ${amount}`,
+    `📅 *Vencimento:* ${dateStr}`,
+    schedule.description ? `📝 *Ref:* ${schedule.description}` : null,
+    ``,
+    `Em caso de dúvidas, entre em contato conosco.`,
+  ].filter(l => l !== null).join('\n');
+
+  return sendWhatsApp(phone, text);
+}
+
 module.exports = {
   sendWhatsApp,
   notifyProvider,
+  notifyClientPayment,
   normalizePhone,
   getStatus,
 };

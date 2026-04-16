@@ -461,6 +461,25 @@
             .catch(function () { notify('Erro ao cancelar.', 'error'); });
         };
 
+        vm.notifyWhatsApp = function (s) {
+          if (!s.client_phone) {
+            notify('Cliente sem telefone cadastrado.', 'error'); return;
+          }
+          var label = 'Enviar lembrete de cobrança via WhatsApp para ' + s.client_name + ' (' + s.client_phone + ')?';
+          if (!confirm(label)) return;
+          $http.post(API + '/whatsapp/notify/payment', { schedule_id: s.id })
+            .then(function (r) {
+              if (r.data.simulated) {
+                notify('Simulado (WhatsApp não configurado): mensagem gerada no log.', 'info');
+              } else {
+                notify('Lembrete enviado via WhatsApp!', 'success');
+              }
+            })
+            .catch(function (e) {
+              notify(e.data && e.data.error ? e.data.error : 'Erro ao enviar WhatsApp.', 'error');
+            });
+        };
+
         /* ── Helpers de formatação ───────────────────────── */
         vm.isOverdue = function (s) {
           if (s.status !== 'active') return false;
