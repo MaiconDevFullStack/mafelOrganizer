@@ -40,6 +40,16 @@ body {
 a { cursor: pointer; color: var(--blue); }
 a:hover { text-decoration: underline; }
 
+/* Normaliza input[type="date"] para ter a mesma altura/padding
+   dos outros .form-control do Bootstrap 3 (34px / 6px 12px) */
+input[type="date"].form-control {
+  height: 34px;
+  padding: 6px 10px;
+  line-height: 1.42857143;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 /* ── Sidebar ─────────────────────────────────────────────── */
 .adm-sidebar {
   position: fixed;
