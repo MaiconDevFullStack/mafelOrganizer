@@ -354,6 +354,7 @@ async function notifyClientPayment(schedule, tenantName) {
     `💰 *Valor:* ${amount}`,
     `📅 *Vencimento:* ${dateStr}`,
     schedule.description ? `📝 *Ref:* ${schedule.description}` : null,
+    schedule.custom_message ? `\n${schedule.custom_message}` : null,
     ``,
     `Em caso de dúvidas, entre em contato conosco.`,
   ].filter(l => l !== null).join('\n');

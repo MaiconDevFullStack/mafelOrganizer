@@ -85,6 +85,11 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
         comment: 'Ex: Serviço, Aluguel, Fornecedor, Mensalidade',
       },
+      custom_message: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'Mensagem personalizada exibida no corpo da notificação de cobrança via WhatsApp',
+      },
     },
     {
       sequelize,

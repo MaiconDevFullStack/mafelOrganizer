@@ -873,7 +873,15 @@
         </div>
 
         <div class="form-group">
-          <label>Observações</label>
+          <label>Mensagem de cobrança <small class="text-muted">(enviada via WhatsApp)</small></label>
+          <textarea class="form-control" ng-model="vm.pForm.custom_message" rows="3"
+            placeholder="Ex: Segue o boleto referente ao serviço de consultoria. Qualquer dúvida estou à disposição!"
+            maxlength="500"></textarea>
+          <span class="help-block" ng-if="vm.pForm.custom_message.length > 400">{{500 - (vm.pForm.custom_message.length || 0)}} caracteres restantes</span>
+        </div>
+
+        <div class="form-group">
+          <label>Observações <small class="text-muted">(uso interno)</small></label>
           <textarea class="form-control" ng-model="vm.pForm.notes" rows="2"></textarea>
         </div>
 
