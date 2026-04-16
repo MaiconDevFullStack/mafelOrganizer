@@ -361,9 +361,14 @@ input[type="date"].form-control {
   max-width: 520px;
   pointer-events: all;
   animation: modal-in .2s ease;
+  /* fallback para browsers sem suporte a dvh */
+  max-height: 90vh;
   max-height: 90dvh;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
 }
 .adm-modal-lg { max-width: 700px; }
 @keyframes modal-in { from { transform: scale(.94) translateY(8px); opacity: 0; } }
@@ -378,11 +383,17 @@ input[type="date"].form-control {
   font-size: 15px;
   background: #f8fafc;
   border-radius: 12px 12px 0 0;
+  flex-shrink: 0;   /* cabeçalho sempre visível — não encolhe */
 }
 .adm-modal-head-green { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
 .adm-modal-head-red   { background: #fff1f2; color: #b91c1c; border-color: #fecdd3; }
 .adm-modal-close { background: none; border: none; font-size: 22px; line-height: 1; color: var(--text-muted); cursor: pointer; }
-.adm-modal-body { padding: 20px; }
+.adm-modal-body {
+  padding: 20px;
+  flex: 1 1 auto;   /* cresce e permite scroll interno do box */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
 .adm-modal-foot {
   padding: 14px 20px;
   border-top: 1px solid var(--border);
@@ -391,6 +402,7 @@ input[type="date"].form-control {
   gap: 8px;
   background: #fafafa;
   border-radius: 0 0 12px 12px;
+  flex-shrink: 0;   /* footer sempre visível — não encolhe */
 }
 
 /* ── Toast ────────────────────────────────────────────────── */
@@ -591,23 +603,50 @@ input[type="date"].form-control {
   /* Upload: empilha colunas */
   .adm-card-body .row [class*="col-sm-"] { width: 100%; float: none; }
 
-  /* Modal — evita corte no topo em mobile:
-     troca bottom-sheet por container rolável alinhado ao topo,
-     com respeito ao safe-area-inset (notch/dynamic island) */
+  /* Modal — corrigido para Android:
+     O container (.adm-modal) preenche o viewport e rola se necessário.
+     O box tem max-height calculado descontando safe-areas (notch + barra nav
+     do Android), com scroll interno e footer sempre visível. */
   .adm-modal {
-    padding: max(env(safe-area-inset-top), 16px) 12px 16px;
+    /* padding-top respeita notch; padding-bottom respeita barra de nav Android */
+    padding-top: max(env(safe-area-inset-top), 12px);
+    padding-right: 10px;
+    padding-bottom: max(env(safe-area-inset-bottom), 12px);
+    padding-left: 10px;
     align-items: flex-start;
-    overflow-y: auto;
+    /* NÃO colocamos overflow-y aqui — o scroll fica no .adm-modal-box */
+    overflow-y: visible;
   }
   .adm-modal-box {
     max-width: 100%;
     border-radius: 12px;
-    max-height: none;      /* deixa o container controlar o scroll */
-    margin: auto 0;        /* distribui espaço sobrando na base */
+    flex-shrink: 0;
+    /* Altura máxima = viewport menos os dois paddings do container.
+       100svh (small viewport height) exclui a barra do browser Android/iOS.
+       Fallback com 100vh para Android Chrome < 108. */
+    max-height: calc(100vh - 24px);
+    max-height: calc(100svh - 24px);
+    /* Scroll no body do modal; footer fica fixo no rodapé do box */
+    overflow-y: visible;
+    display: flex;
+    flex-direction: column;
+  }
+  .adm-modal-body {
+    padding: 14px;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    /* Garante que o body ocupa o espaço disponível sem ultrapassar */
+    min-height: 0;
   }
   .adm-modal-lg  { max-width: 100%; }
-  .adm-modal-body { padding: 14px; }
-  .adm-modal-foot { padding: 10px 14px; flex-wrap: wrap; gap: 8px; }
+  .adm-modal-foot {
+    padding: 10px 14px;
+    flex-wrap: wrap;
+    gap: 8px;
+    flex-shrink: 0;
+  }
   .adm-modal-foot .btn { flex: 1; min-width: 0; }
 
   /* Toast: full-width na base */
