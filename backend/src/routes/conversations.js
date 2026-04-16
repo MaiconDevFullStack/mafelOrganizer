@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { Conversation, Message, Tenant, KnowledgeBase } = require('../models');
-const { generateGroqReply, generateWelcome } = require('../services/groqService');
+const { generateGroqReply } = require('../services/groqService');
 
 // GET /conversations?tenant_id=xxx[&status=open|closed|all]
 router.get('/', async (req, res) => {
@@ -39,9 +39,8 @@ router.post('/', async (req, res) => {
       channel: channel || 'web',
     });
 
-    // Gera saudação dinâmica (contextual ao horário e à KB disponível)
-    // Executa em paralelo para não bloquear a resposta
-    const welcomeMessage = await generateWelcome(tenant, KnowledgeBase);
+    // Retorna a mensagem de boas-vindas exatamente como cadastrada pelo prestador
+    const welcomeMessage = tenant.welcome_message || null;
 
     res.status(201).json({ ...conversation.toJSON(), welcomeMessage });
   } catch (err) {
