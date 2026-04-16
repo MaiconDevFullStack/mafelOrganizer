@@ -3,6 +3,8 @@ const router = express.Router();
 const { PaymentSchedule, Transaction, Invoice } = require('../models');
 const Joi = require('joi');
 const { v4: uuidv4 } = require('uuid');
+const { notifyClientPayment } = require('../services/whatsappService');
+const { Tenant } = require('../models');
 
 const scheduleSchema = Joi.object({
   tenant_id:      Joi.string().uuid().required(),
@@ -107,6 +109,7 @@ router.patch('/schedules/:id', async (req, res) => {
       'status', 'description', 'notes', 'custom_message', 'notify_time', 'due_date', 'amount',
       'recurrence', 'recurring_day', 'payment_method', 'category',
       'client_name', 'client_email', 'client_phone',
+      'notification_status', 'last_notified_at',
     ];
     const updates = {};
     allowed.forEach((k) => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
@@ -116,6 +119,23 @@ router.patch('/schedules/:id', async (req, res) => {
     res.json(schedule);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /payments/schedules/:id/notify — envia SMS imediatamente e reseta status
+router.post('/schedules/:id/notify', async (req, res) => {
+  try {
+    const schedule = await PaymentSchedule.findByPk(req.params.id);
+    if (!schedule) return res.status(404).json({ error: 'Agendamento não encontrado' });
+    if (!schedule.client_phone) {
+      return res.status(422).json({ error: 'Cliente sem telefone cadastrado.' });
+    }
+    const tenant = await Tenant.findByPk(schedule.tenant_id, { attributes: ['name'] });
+    await notifyClientPayment(schedule, tenant?.name || '');
+    await schedule.update({ notification_status: 'sent', last_notified_at: new Date() });
+    res.json({ success: true, message: 'SMS enviado com sucesso.' });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
   }
 });
 

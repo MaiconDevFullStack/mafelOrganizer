@@ -463,6 +463,13 @@
             .finally(function () { vm.saving = false; });
         };
 
+        vm.sendSmsNow = function (s) {
+          if (!confirm('Enviar SMS de cobrança agora para ' + s.client_name + ' (' + s.client_phone + ')?')) return;
+          $http.post(API + '/payments/schedules/' + s.id + '/notify')
+            .then(function () { notify('SMS enviado com sucesso!', 'success'); })
+            .catch(function (e) { notify(e.data && e.data.error ? e.data.error : 'Erro ao enviar SMS.', 'error'); });
+        };
+
         vm.executeSchedule = function (s) {
           var label = s.type === 'receivable' ? 'Confirma execução da cobrança?' : 'Marcar como pago?';
           if (!confirm(label)) return;

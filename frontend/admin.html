@@ -332,6 +332,9 @@
                     <button class="btn btn-xs btn-info" ng-click="vm.executeSchedule(s)" title="Executar cobrança">
                       <span class="glyphicon glyphicon-play"></span>
                     </button>
+                    <button class="btn btn-xs btn-warning" ng-show="s.client_phone && s.notify_time" ng-click="vm.sendSmsNow(s)" title="Enviar SMS agora">
+                      <span class="glyphicon glyphicon-send"></span>
+                    </button>
                     <button class="btn btn-xs btn-default" ng-click="vm.openPayModal('receivable', s)">
                       <span class="glyphicon glyphicon-pencil"></span>
                     </button>
@@ -381,6 +384,9 @@
                   <td class="nowrap">
                     <button class="btn btn-xs btn-success" ng-click="vm.executeSchedule(s)" title="Marcar como pago">
                       <span class="glyphicon glyphicon-ok"></span>
+                    </button>
+                    <button class="btn btn-xs btn-warning" ng-show="s.client_phone && s.notify_time" ng-click="vm.sendSmsNow(s)" title="Enviar SMS agora">
+                      <span class="glyphicon glyphicon-send"></span>
                     </button>
                     <button class="btn btn-xs btn-default" ng-click="vm.openPayModal('payable', s)">
                       <span class="glyphicon glyphicon-pencil"></span>
