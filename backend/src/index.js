@@ -147,18 +147,16 @@ app.listen(PORT, '0.0.0.0', () => {
         const { Op } = require('sequelize');
 
         // ── Busca candidatos ──────────────────────────────────────────
-        // Para cobranças únicas (once): notifica independente do status de pagamento
-        // Para recorrentes: notifica somente as ativas
+        // once: só envia se notification_status=pending (envio único)
+        // recorrentes: sem restrição de status — deduplicação via last_notified_at
         const candidates = await PSModel.findAll({
           where: {
             notify_time: { [Op.like]: `${currentTime}%` },
             [Op.or]: [
-              // once: pendente de notificação, em qualquer status de pagamento
               { recurrence: 'once',    notification_status: 'pending' },
-              // recorrentes: ativas (notifica todo mês/semana/ano)
-              { recurrence: 'monthly', status: 'active' },
-              { recurrence: 'weekly',  status: 'active' },
-              { recurrence: 'yearly',  status: 'active' },
+              { recurrence: 'monthly' },
+              { recurrence: 'weekly'  },
+              { recurrence: 'yearly'  },
             ],
           },
         });
@@ -216,27 +214,32 @@ app.listen(PORT, '0.0.0.0', () => {
 
         const { Op } = require('sequelize');
 
-        // Registros únicos pendentes de hoje cujo horário já passou (notify_time <= agora)
+        // Catch-up para once: nunca notificados, vencimento hoje, horário já passou
+        // Catch-up para recorrentes: não notificados hoje, dia bate, horário já passou
         const missed = await PSModel.findAll({
           where: {
-            notification_status: 'pending',
-            last_notified_at: null,
+            notify_time: { [Op.ne]: null },
             [Op.or]: [
-              { recurrence: 'once',    due_date: todayDate },
-              { recurrence: 'monthly', recurring_day: todayDay, status: 'active' },
-              { recurrence: 'weekly',  due_date: todayDate,     status: 'active' },
-              { recurrence: 'yearly',  due_date: todayDate,     status: 'active' },
+              { recurrence: 'once',    notification_status: 'pending', due_date: todayDate, last_notified_at: null },
+              { recurrence: 'monthly', recurring_day: todayDay },
+              { recurrence: 'weekly',  due_date: todayDate },
+              { recurrence: 'yearly',  due_date: todayDate },
             ],
           },
         });
 
         for (const schedule of missed) {
           if (!schedule.notify_time) continue;
+          // Deduplicação: já enviou hoje em horário BR?
+          if (schedule.last_notified_at) {
+            const lastBR = new Date(new Date(schedule.last_notified_at).getTime() - 3 * 60 * 60 * 1000);
+            if (lastBR.toISOString().slice(0, 10) === todayDate) continue;
+          }
           // Só envia se o horário programado já passou
           const [hh, mm] = schedule.notify_time.split(':').map(Number);
           const scheduledMinutes = hh * 60 + mm;
           const nowMinutes = brDate.getUTCHours() * 60 + brDate.getUTCMinutes();
-          if (scheduledMinutes > nowMinutes) continue; // ainda não chegou a hora
+          if (scheduledMinutes > nowMinutes) continue;
 
           try {
             const tenant = await TenantModelForNotif.findByPk(schedule.tenant_id, { attributes: ['name'] });
