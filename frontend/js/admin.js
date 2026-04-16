@@ -350,8 +350,12 @@
               };
           vm.pForm.type = type;
           // Ao editar, marca is_recurring se for mensal com dia definido
+          // e normaliza due_date para yyyy-MM-dd (remove hora/fuso)
           if (schedule) {
             vm.pForm.is_recurring = (schedule.recurrence === 'monthly' && !!schedule.recurring_day);
+            if (vm.pForm.due_date && typeof vm.pForm.due_date === 'string') {
+              vm.pForm.due_date = vm.pForm.due_date.substring(0, 10);
+            }
           }
           vm.modals.pay = true;
         };
@@ -394,11 +398,22 @@
           var payload = angular.copy(vm.pForm);
           delete payload.is_recurring; // campo apenas de UI
 
-          $http.post(API + '/payments/schedules', payload)
+          var isEdit = !!payload.id;
+          var req = isEdit
+            ? $http.patch(API + '/payments/schedules/' + payload.id, payload)
+            : $http.post(API + '/payments/schedules', payload);
+
+          req
             .then(function (r) {
-              var type = r.data.type;
-              if (type === 'receivable') vm.receivable.push(r.data);
-              else                        vm.payable.push(r.data);
+              var type = payload.type || r.data.type;
+              if (isEdit) {
+                var arr = type === 'receivable' ? vm.receivable : vm.payable;
+                var idx = arr.findIndex(function (s) { return s.id === r.data.id; });
+                if (idx >= 0) arr[idx] = r.data;
+              } else {
+                if (type === 'receivable') vm.receivable.push(r.data);
+                else                        vm.payable.push(r.data);
+              }
               vm.modals.pay = false;
               notify('Lançamento salvo com sucesso!', 'success');
               loadStats();

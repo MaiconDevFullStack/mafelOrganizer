@@ -65,7 +65,7 @@ router.get('/stats', async (req, res) => {
 // POST /payments/schedules — criado pelo prestador (cadastra data de vencimento)
 router.post('/schedules', async (req, res) => {
   try {
-    const { error, value } = scheduleSchema.validate(req.body);
+    const { error, value } = scheduleSchema.validate(req.body, { stripUnknown: true });
     if (error) return res.status(400).json({ error: error.details[0].message });
 
     const schedule = await PaymentSchedule.create({
@@ -100,7 +100,11 @@ router.patch('/schedules/:id', async (req, res) => {
   try {
     const schedule = await PaymentSchedule.findByPk(req.params.id);
     if (!schedule) return res.status(404).json({ error: 'Agendamento não encontrado' });
-    const allowed = ['status', 'description', 'notes', 'due_date', 'amount', 'recurrence', 'payment_method', 'category'];
+    const allowed = [
+      'status', 'description', 'notes', 'due_date', 'amount',
+      'recurrence', 'recurring_day', 'payment_method', 'category',
+      'client_name', 'client_email', 'client_phone',
+    ];
     const updates = {};
     allowed.forEach((k) => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
     await schedule.update(updates);
