@@ -118,75 +118,85 @@ app.listen(PORT, '0.0.0.0', () => {
     const { PaymentSchedule: PSModel, Tenant: TenantModelForNotif } = require('./models');
     const { notifyClientPayment } = require('./services/whatsappService');
 
+    // Normaliza registros antigos que possam ter HH:MM:SS no notify_time
+    (async () => {
+      try {
+        const { Op: OpFix, literal } = require('sequelize');
+        const toFix = await PSModel.findAll({
+          where: { notify_time: { [OpFix.like]: '__:__:__%' } },
+          attributes: ['id', 'notify_time'],
+        });
+        for (const s of toFix) {
+          await s.update({ notify_time: s.notify_time.slice(0, 5) });
+        }
+        if (toFix.length > 0) console.log(`🔧 notify_time normalizado em ${toFix.length} registro(s).`);
+      } catch (e) { console.warn('normalize notify_time:', e.message); }
+    })();
+
     async function sendScheduledPaymentNotifications() {
       try {
-        // Hora atual em Brasília (UTC-3)
-        const now      = new Date();
-        const brOffset = -3 * 60; // minutos
-        const brNow    = new Date(now.getTime() + (brOffset - now.getTimezoneOffset()) * 60000);
-        const brHH     = String(brNow.getHours()).padStart(2, '0');
-        const brMM     = String(brNow.getMinutes()).padStart(2, '0');
-        const currentTime = `${brHH}:${brMM}`;
-        const todayDate   = brNow.toISOString().slice(0, 10); // YYYY-MM-DD
-        const todayDay    = brNow.getDate(); // 1–31
+        // ── Hora atual em Brasília (UTC-3) ──────────────────────────────
+        const now = new Date();
+        // Data/hora local de Brasília como string — sem depender do TZ do servidor
+        const brDate = new Date(now.getTime() - 3 * 60 * 60 * 1000); // subtrai 3h do UTC
+        const brHH        = String(brDate.getUTCHours()).padStart(2, '0');
+        const brMM        = String(brDate.getUTCMinutes()).padStart(2, '0');
+        const currentTime = `${brHH}:${brMM}`;           // "HH:MM"
+        const todayDate   = brDate.toISOString().slice(0, 10); // "YYYY-MM-DD" (BR)
+        const todayDay    = brDate.getUTCDate();           // 1-31
 
         const { Op } = require('sequelize');
+
+        // Busca registros cujo notify_time começa com HH:MM (compatível com HH:MM e HH:MM:SS)
         const candidates = await PSModel.findAll({
           where: {
-            notify_time: currentTime,
-            status:      'active',
+            status: 'active',
+            notify_time: { [Op.like]: `${currentTime}%` },
           },
         });
 
         for (const schedule of candidates) {
           try {
-            const isOnce      = schedule.recurrence === 'once';
-            const isMonthly   = schedule.recurrence === 'monthly';
-            const isRecurring = !isOnce;
-
-            // Evita reenvio no mesmo minuto
+            // ── Deduplicação: calcula data BR do último envio ──────────
+            let lastNotifiedDateBR = null;
             if (schedule.last_notified_at) {
-              const lastStr = new Date(schedule.last_notified_at).toISOString().slice(0, 16); // YYYY-MM-DDTHH:MM
-              const nowStr  = brNow.toISOString().slice(0, 16);
-              if (lastStr === nowStr) continue;
+              const lastUTC = new Date(schedule.last_notified_at);
+              const lastBR  = new Date(lastUTC.getTime() - 3 * 60 * 60 * 1000);
+              lastNotifiedDateBR = lastBR.toISOString().slice(0, 10); // "YYYY-MM-DD" em BR
             }
 
+            // Já enviou hoje (horário BR)? Pula.
+            if (lastNotifiedDateBR === todayDate) continue;
+
+            // ── Verifica se deve disparar hoje ─────────────────────────
             let shouldSend = false;
 
-            if (isOnce) {
-              // Dispara apenas no dia do vencimento e se ainda não enviado
+            if (schedule.recurrence === 'once') {
+              // Dispara apenas no dia do vencimento, uma única vez
               shouldSend = schedule.due_date === todayDate &&
                            schedule.notification_status === 'pending';
-            } else if (isMonthly) {
-              // Dispara no dia do mês cadastrado (recurring_day) a cada mês
-              const lastNotifiedDay = schedule.last_notified_at
-                ? new Date(schedule.last_notified_at).toISOString().slice(0, 10)
-                : null;
-              shouldSend = schedule.recurring_day === todayDay &&
-                           lastNotifiedDay !== todayDate;
+            } else if (schedule.recurrence === 'monthly') {
+              // Dispara todo mês no dia recurring_day
+              shouldSend = Number(schedule.recurring_day) === todayDay;
             } else {
-              // weekly/yearly: dispara no dia do vencimento
-              const lastNotifiedDay = schedule.last_notified_at
-                ? new Date(schedule.last_notified_at).toISOString().slice(0, 10)
-                : null;
-              shouldSend = schedule.due_date === todayDate &&
-                           lastNotifiedDay !== todayDate;
+              // weekly / yearly: dispara no dia do vencimento
+              shouldSend = schedule.due_date === todayDate;
             }
 
             if (!shouldSend) continue;
 
-            // Busca o nome do tenant para personalizar a mensagem
+            // ── Busca nome do tenant e envia ───────────────────────────
             const tenant = await TenantModelForNotif.findByPk(schedule.tenant_id, { attributes: ['name'] });
             const tenantName = tenant?.name || '';
 
             await notifyClientPayment(schedule, tenantName);
 
-            // Atualiza controle de envio
+            // Marca envio (armazena timestamp UTC real)
             const updates = { last_notified_at: now };
-            if (isOnce) updates.notification_status = 'sent';
+            if (schedule.recurrence === 'once') updates.notification_status = 'sent';
             await schedule.update(updates);
 
-            console.log(`📤 Cobrança enviada: cliente="${schedule.client_name}" tenant="${tenantName}" horário=${currentTime}`);
+            console.log(`📤 Notificação enviada: cliente="${schedule.client_name}" recorrência=${schedule.recurrence} data=${todayDate} horário=${currentTime}`);
           } catch (err) {
             console.error(`⚠️  Erro ao notificar cobrança ${schedule.id}:`, err.message);
           }
