@@ -286,6 +286,13 @@
               Após pagar, a confirmação ocorre em segundos.
             </span>
           </div>
+          <!-- Botão recomeçar -->
+          <div style="text-align:center; margin-top:16px">
+            <button class="btn-back" ng-click="vm.restartRegistration()" style="width:auto;padding:8px 20px">
+              <span class="glyphicon glyphicon-refresh"></span> Recomeçar cadastro
+            </button>
+          </div>
+
         </div>
 
         <!-- ✅ Pagamento confirmado -->
@@ -348,6 +355,15 @@
 
         vm.pixData = null;
         var pollInterval = null;
+
+        // Restaura sessão PIX pendente (recarregamento de página)
+        var savedPix = null;
+        try { savedPix = JSON.parse($window.sessionStorage.getItem('mafel_pix')); } catch (_) {}
+        if (savedPix && savedPix.mp_payment_id) {
+          vm.pixData = savedPix;
+          vm.step    = 4;
+          vm.startPolling(savedPix.mp_payment_id);
+        }
 
         // ─── Slugify auxiliar ────────────────────────────
         function toSlug(str) {
@@ -415,12 +431,27 @@
             vm.pixData = res.data;
             vm.step    = 4;
             vm.loading = false;
+            // Persiste no sessionStorage para sobreviver a recarregamentos
+            try { $window.sessionStorage.setItem('mafel_pix', JSON.stringify(res.data)); } catch (_) {}
             vm.startPolling(res.data.mp_payment_id);
           })
           .catch(function (err) {
             vm.error   = (err.data && err.data.error) ? err.data.error : 'Erro ao criar cadastro. Tente novamente.';
             vm.loading = false;
           });
+        };
+
+        // ─── Recomeçar cadastro (cancela PIX atual e volta ao step 1) ──
+        vm.restartRegistration = function () {
+          if (!confirm('Deseja realmente recomeçar? O QR Code atual será descartado.')) return;
+          $interval.cancel(pollInterval);
+          try { $window.sessionStorage.removeItem('mafel_pix'); } catch (_) {}
+          vm.step    = 1;
+          vm.pixData = null;
+          vm.polling = false;
+          vm.paymentConfirmed = false;
+          vm.error   = null;
+          vm.form    = { name:'', email:'', phone:'', password:'', password_confirm:'', business_name:'', business_slug:'', plan:'monthly' };
         };
 
         // ─── Polling de status do PIX ────────────────────
@@ -435,6 +466,7 @@
                   vm.polling = false;
                   vm.paymentConfirmed = true;
                   $interval.cancel(pollInterval);
+                  try { $window.sessionStorage.removeItem('mafel_pix'); } catch (_) {}
                 }
               })
               .catch(angular.noop);

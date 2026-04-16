@@ -67,7 +67,33 @@ router.post('/initiate', async (req, res) => {
     // E-mail já cadastrado?
     const existingUser = await User.findOne({ where: { email: email.toLowerCase() } });
     if (existingUser) {
-      return res.status(409).json({ error: 'E-mail já cadastrado. Faça login.' });
+      if (existingUser.is_active) {
+        // Conta já ativa → não permite reuso
+        return res.status(409).json({ error: 'E-mail já cadastrado e ativo. Faça login.' });
+      }
+
+      // Conta inativa (pagamento pendente/abandonado) → limpa e recria
+      console.log(`♻️  Recriando cadastro pendente para ${email}`);
+      try {
+        const mpClient   = buildMPClient();
+        const paymentApi = new Payment(mpClient);
+        // Cancela cobranças PIX pendentes no MP
+        const oldSubs = await Subscription.findAll({
+          where: { tenant_id: existingUser.tenant_id, status: 'pending' },
+        });
+        for (const s of oldSubs) {
+          if (s.mp_payment_id) {
+            try {
+              await paymentApi.cancel({ id: s.mp_payment_id });
+            } catch (_) { /* ignora se já expirado */ }
+          }
+        }
+      } catch (_) { /* ignora falha no MP cancel */ }
+
+      // Remove registros antigos (subscription → user → tenant)
+      await Subscription.destroy({ where: { tenant_id: existingUser.tenant_id } });
+      await User.destroy({ where: { tenant_id: existingUser.tenant_id } });
+      await Tenant.destroy({ where: { id: existingUser.tenant_id } });
     }
 
     // Gera slug único para o tenant
