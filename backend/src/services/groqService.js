@@ -20,7 +20,8 @@ const CHUNK_OVERLAP     = 100;   // sobreposição entre chunks consecutivos
 const TOP_K_RAW         = 10;    // chunks candidatos antes da deduplicação
 const TOP_K_FINAL       = 5;     // chunks finais após deduplicação
 const MAX_KB_CHARS      = 4000;  // limite total de chars de KB no prompt
-const MIN_CHUNK_SCORE   = 0.015; // limiar mínimo de relevância TF-IDF
+// Sem limiar de score mínimo: TF-IDF ranqueia, o LLM decide relevância semântica.
+// Aplicar threshold lexical bloqueia perguntas com sinônimos/paráfrases válidas.
 const JACCARD_THRESHOLD = 0.50;  // similaridade máxima entre chunks (dedup)
 
 // ── Histórico e sumarização ───────────────────────────────────
@@ -145,11 +146,14 @@ function splitIntoChunks(text, docName) {
 // 3. RELEVÂNCIA: TF-IDF SIMPLIFICADO
 // ─────────────────────────────────────────────────────────────
 
+// ATENÇÃO: tokenize() remove acentos ANTES de filtrar, portanto as stopwords
+// devem estar sem acento para que o filtro funcione corretamente.
 const STOPWORDS = new Set([
   'que','com','para','uma','por','mais','como','mas','seu','sua','nos','das',
-  'dos','ser','foi','ele','ela','não','sim','isso','este','essa','aqui','também',
-  'the','and','for','are','this','that','with','from','have','not','will','você',
-  'sobre','numa','num','nao','pode','tem','ter','são','está','pelo','pela','pois',
+  'dos','ser','foi','ele','ela','nao','sim','isso','este','essa','aqui','tambem',
+  'the','and','for','are','this','that','with','from','have','not','will','voce',
+  'sobre','numa','num','pode','tem','ter','sao','esta','pelo','pela','pois',
+  'muito','pouco','mesmo','ainda','onde','quando','quem','qual','quais','como',
 ]);
 
 function tokenize(text) {
@@ -209,8 +213,11 @@ function selectTopChunks(allChunks, query, kRaw, kFinal) {
     .sort((a, b) => b.score - a.score)
     .slice(0, kRaw);
 
+  // hasRelevantContent: true se o melhor score > 0 (algum token da query
+  // aparece na KB). Score 0 significa que NENHUM token coincide lexicalmente,
+  // mas o LLM ainda assim recebe os top chunks para julgamento semântico.
   const best = scored[0]?.score || 0;
-  const hasRelevantContent = best >= MIN_CHUNK_SCORE;
+  const hasRelevantContent = best > 0;
 
   // Deduplicação inter-chunk: descarta chunks muito similares entre si
   const selected  = [];
@@ -450,12 +457,9 @@ async function generateGroqReply(userText, tenant, previousMsgs = [], KnowledgeB
     const { context: kbContext, hasKb, hasRelevantContent } =
       await buildKbContext(KnowledgeBase, tenant.id, userText);
 
-    // 2. KB existe mas pergunta está fora do escopo → recusa imediata sem chamar o modelo forte
-    const isSimpleGreeting = SIMPLE_RE.some(p => p.test(userText.toLowerCase().trim()));
-    if (hasKb && !hasRelevantContent && !isSimpleGreeting) {
-      const companyName = tenant.name || 'a empresa';
-      console.log(`[Groq] KB sem relevância para query — retornando recusa direta.`);
-      return `Não encontrei essa informação na minha base de conhecimento. Recomendo entrar em contato diretamente com a equipe de ${companyName} para obter essa resposta.`;
+    // 2. Log de relevância lexical (não bloqueia mais — o LLM faz a triagem semântica)
+    if (hasKb && !hasRelevantContent) {
+      console.log(`[Groq] Score TF-IDF=0 para query (sem match lexical) — enviando top chunks para o modelo fazer triagem semântica.`);
     }
 
     // 3. Histórico: sumariza se muito longo
