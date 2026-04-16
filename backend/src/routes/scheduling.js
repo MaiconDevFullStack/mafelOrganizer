@@ -9,7 +9,7 @@ const express  = require('express');
 const router   = express.Router();
 const { Tenant, Conversation, Message, Appointment, KnowledgeBase, User, ServiceSlot } = require('../models');
 const { processSchedulingStep } = require('../services/schedulingService');
-const { authMiddleware } = require('../middlewares/auth');
+const { verifyToken } = require('../middlewares/auth');
 const Joi = require('joi');
 
 const stepSchema = Joi.object({
@@ -91,7 +91,7 @@ router.post('/step', async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 // GET /api/scheduling/appointments?tenant_id=...  (autenticado)
 // ─────────────────────────────────────────────────────────────
-router.get('/appointments', authMiddleware, async (req, res) => {
+router.get('/appointments', verifyToken, async (req, res) => {
   try {
     const { tenant_id, status } = req.query;
     const where = {};
@@ -114,7 +114,7 @@ router.get('/appointments', authMiddleware, async (req, res) => {
 // PATCH/DELETE /api/scheduling/slots/:id     (autenticado)
 // ─────────────────────────────────────────────────────────────
 
-router.get('/slots', authMiddleware, async (req, res) => {
+router.get('/slots', verifyToken, async (req, res) => {
   try {
     const where = {};
     if (req.query.tenant_id) where.tenant_id = req.query.tenant_id;
@@ -128,7 +128,7 @@ router.get('/slots', authMiddleware, async (req, res) => {
   }
 });
 
-router.post('/slots', authMiddleware, async (req, res) => {
+router.post('/slots', verifyToken, async (req, res) => {
   const { error, value } = slotSchema.validate(req.body);
   if (error) return res.status(400).json({ error: error.details[0].message });
   try {
@@ -139,7 +139,7 @@ router.post('/slots', authMiddleware, async (req, res) => {
   }
 });
 
-router.patch('/slots/:id', authMiddleware, async (req, res) => {
+router.patch('/slots/:id', verifyToken, async (req, res) => {
   try {
     const slot = await ServiceSlot.findByPk(req.params.id);
     if (!slot) return res.status(404).json({ error: 'Slot não encontrado' });
@@ -153,7 +153,7 @@ router.patch('/slots/:id', authMiddleware, async (req, res) => {
   }
 });
 
-router.delete('/slots/:id', authMiddleware, async (req, res) => {
+router.delete('/slots/:id', verifyToken, async (req, res) => {
   try {
     const slot = await ServiceSlot.findByPk(req.params.id);
     if (!slot) return res.status(404).json({ error: 'Slot não encontrado' });
