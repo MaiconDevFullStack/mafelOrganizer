@@ -386,13 +386,12 @@ async function summarizeHistory(groq, messages) {
  *  - Resumo incluso  → adiciona contexto do histórico sumarizado
  */
 function buildSystemPrompt(tenant, kbContext, hasKb, historySummary) {
-  const agentName   = tenant.agent_name      || 'Assistente';
-  const companyName = tenant.name            || 'a empresa';
-  const welcome     = tenant.welcome_message || '';
+  const agentName   = tenant.agent_name || 'Assistente';
+  const companyName = tenant.name       || 'a empresa';
 
   let prompt = `Você é ${agentName}, o assistente virtual oficial de ${companyName}.\n`;
   prompt    += `Responda SEMPRE em português, de forma cordial, clara e objetiva.\n`;
-  if (welcome) prompt += `Sua saudação padrão é: "${welcome}".\n`;
+  prompt    += `Nunca se apresente novamente nem repita saudações — o cliente já recebeu a mensagem de boas-vindas.\n`;
 
   if (hasKb && kbContext.trim()) {
     // Modo KB-exclusivo: respostas apenas com o que está na base
@@ -516,7 +515,7 @@ function fallbackReply(userText, tenant) {
   const welcome = tenant?.welcome_message || 'Como posso ajudar?';
   const agent   = tenant?.agent_name     || 'Assistente';
 
-  if (/ol[aá]|^oi\b|hello/.test(lower))            return `${welcome} Sou ${agent}. Em que posso ajudar?`;
+  if (/ol[aá]|^oi\b|hello/.test(lower))            return `Olá! Em que posso ajudar?`;
   if (/pagamento|fatura|boleto/.test(lower))        return 'Para consultar pagamentos ou emitir faturas, entre em contato com nossa equipe ou acesse o portal do cliente.';
   if (/agendamento|hor[aá]rio/.test(lower))         return 'Posso ajudar com agendamentos! Por favor, informe a data e o serviço desejado.';
   return 'Entendi! Pode me dar mais detalhes sobre sua necessidade? Farei o meu melhor para ajudar.';
