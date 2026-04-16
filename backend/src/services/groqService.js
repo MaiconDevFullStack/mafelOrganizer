@@ -536,4 +536,82 @@ function invalidateTenantKbCache(tenantId) {
   console.log(`[Groq] Cache KB+resumo invalidado para tenant=${tenantId}`);
 }
 
-module.exports = { generateGroqReply, invalidateTenantKbCache, buildKbContext };
+// ─────────────────────────────────────────────────────────────
+// 11. SAUDAÇÃO INICIAL DINÂMICA
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Gera a mensagem de abertura da conversa de forma dinâmica.
+ * Usa a welcome_message do tenant como instrução de persona e injeta:
+ *  - Saudação adequada ao horário (bom dia / boa tarde / boa noite)
+ *  - Prévia dos tópicos disponíveis na KB (se houver)
+ *  - Variação natural a cada sessão (temperature 0.8)
+ *
+ * @param {Object} tenant        – registro Tenant
+ * @param {Object} KnowledgeBase – model Sequelize
+ * @returns {Promise<string>}
+ */
+async function generateWelcome(tenant, KnowledgeBase) {
+  const apiKey = process.env.GROQ_API_KEY;
+  const agentName   = tenant.agent_name      || 'Assistente';
+  const companyName = tenant.name            || 'nossa empresa';
+  const baseWelcome = tenant.welcome_message || `Olá! Sou ${agentName} de ${companyName}. Como posso ajudar?`;
+
+  // Sem API key → retorna a mensagem base gravada pelo prestador
+  if (!apiKey || apiKey === 'seu_groq_api_key_aqui') return baseWelcome;
+
+  try {
+    // ── Horário de Brasília ──────────────────────────────────
+    const hourBR  = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: 'numeric', hour12: false });
+    const h       = parseInt(hourBR, 10);
+    const period  = h < 12 ? 'manhã' : h < 18 ? 'tarde' : 'noite';
+    const greeting = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+
+    // ── Tópicos disponíveis na KB (listagem rápida) ──────────
+    let kbHint = '';
+    try {
+      const docs = await KnowledgeBase.findAll({
+        where: { tenant_id: tenant.id, status: 'ready' },
+        attributes: ['description', 'original_name'],
+        limit: 5,
+      });
+      if (docs.length > 0) {
+        const topics = docs
+          .map(d => d.description || d.original_name)
+          .filter(Boolean)
+          .join(', ');
+        kbHint = `\nA base de conhecimento cobre os seguintes tópicos: ${topics}.`;
+      }
+    } catch (_) { /* KB indisponível — não bloqueia */ }
+
+    const groq = new Groq({ apiKey });
+
+    const systemMsg =
+      `Você é ${agentName}, o assistente virtual de ${companyName}.\n` +
+      `Responda SEMPRE em português.\n` +
+      `A mensagem de boas-vindas configurada pelo prestador é: "${baseWelcome}".\n` +
+      `Use essa mensagem como inspiração/persona, mas adapte naturalmente ao momento atual (${period}).` +
+      kbHint;
+
+    const userMsg =
+      `Gere UMA saudação de abertura para um novo cliente que acabou de abrir o chat agora.\n` +
+      `Comece com "${greeting}!", mencione seu nome (${agentName}) e a empresa (${companyName}), ` +
+      `e convide o cliente a falar sobre o que precisa.` +
+      (kbHint ? ` Se achar natural, mencione brevemente os temas que pode ajudar.` : '') +
+      `\nSeja caloroso, conciso (máx 3 frases) e variado — evite repetir palavra por palavra a mensagem base.`;
+
+    const completion = await groq.chat.completions.create({
+      model:       MODEL_FAST,
+      messages:    [{ role: 'system', content: systemMsg }, { role: 'user', content: userMsg }],
+      temperature: 0.8,   // variação natural a cada sessão
+      max_tokens:  120,
+    });
+
+    return completion.choices[0]?.message?.content?.trim() || baseWelcome;
+  } catch (err) {
+    console.warn('[Groq] generateWelcome falhou, usando mensagem base:', err.message);
+    return baseWelcome;
+  }
+}
+
+module.exports = { generateGroqReply, generateWelcome, invalidateTenantKbCache, buildKbContext };

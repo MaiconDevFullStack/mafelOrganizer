@@ -73,19 +73,7 @@
       <!-- ── MENSAGENS ───────────────────────────────────────── -->
       <div class="messages-area" id="messagesArea">
 
-        <!-- Mensagem de boas-vindas -->
-        <div class="message-row agent-row" ng-if="vm.messages.length === 0">
-          <div class="avatar agent-avatar"
-               ng-style="{'background-color': vm.tenant.primary_color || '#2563eb'}">
-            <span class="glyphicon glyphicon-user"></span>
-          </div>
-          <div class="message-bubble agent-bubble">
-            <p>{{vm.tenant.welcome_message || 'Olá! Como posso ajudar?'}}</p>
-            <span class="msg-time">Agora</span>
-          </div>
-        </div>
-
-        <!-- Lista de mensagens -->
+        <!-- Lista de mensagens (1ª mensagem = saudação dinâmica gerada pelo Groq) -->
         <div class="message-row"
              ng-repeat="msg in vm.messages track by $index"
              ng-class="msg.author === 'client' ? 'client-row' : 'agent-row'">

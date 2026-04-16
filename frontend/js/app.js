@@ -116,6 +116,14 @@
           .then(function (res) {
             vm.conversationId = res.data.id;
             _resetInactivityTimer(); // começa a contar inatividade
+            // Mostra a saudação dinâmica gerada pelo Groq no backend
+            if (res.data.welcomeMessage) {
+              vm.messages.push({
+                author:     'agent',
+                text:       res.data.welcomeMessage,
+                created_at: new Date(),
+              });
+            }
           })
           .catch(function (err) {
             console.warn('Tenant não encontrado, usando padrão.', err);
