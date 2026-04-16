@@ -20,6 +20,8 @@ const scheduleSchema = Joi.object({
   payment_method: Joi.string().valid('boleto', 'pix', 'credit_card', 'debit').default('pix'),
   notes:          Joi.string().optional().allow(null, ''),
   custom_message: Joi.string().max(500).optional().allow(null, ''),
+  notify_time:    Joi.string().pattern(/^([01]\d|2[0-3]):[0-5]\d$/).optional().allow(null, '')
+    .messages({ 'string.pattern.base': 'Horário inválido. Use o formato HH:MM (ex: 09:00).' }),
 });
 
 // GET /payments/schedules?tenant_id=...&type=receivable|payable&status=active
@@ -102,7 +104,7 @@ router.patch('/schedules/:id', async (req, res) => {
     const schedule = await PaymentSchedule.findByPk(req.params.id);
     if (!schedule) return res.status(404).json({ error: 'Agendamento não encontrado' });
     const allowed = [
-      'status', 'description', 'notes', 'custom_message', 'due_date', 'amount',
+      'status', 'description', 'notes', 'custom_message', 'notify_time', 'due_date', 'amount',
       'recurrence', 'recurring_day', 'payment_method', 'category',
       'client_name', 'client_email', 'client_phone',
     ];

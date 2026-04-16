@@ -112,6 +112,93 @@ app.listen(PORT, '0.0.0.0', () => {
     }
     autoCloseInactive();
     setInterval(autoCloseInactive, 15 * 60 * 1000);
+
+    // ── Job: envia notificações de cobrança no horário cadastrado ──
+    // Roda a cada minuto. Usa horário de Brasília (UTC-3).
+    const { PaymentSchedule: PSModel, Tenant: TenantModelForNotif } = require('./models');
+    const { notifyClientPayment } = require('./services/whatsappService');
+
+    async function sendScheduledPaymentNotifications() {
+      try {
+        // Hora atual em Brasília (UTC-3)
+        const now      = new Date();
+        const brOffset = -3 * 60; // minutos
+        const brNow    = new Date(now.getTime() + (brOffset - now.getTimezoneOffset()) * 60000);
+        const brHH     = String(brNow.getHours()).padStart(2, '0');
+        const brMM     = String(brNow.getMinutes()).padStart(2, '0');
+        const currentTime = `${brHH}:${brMM}`;
+        const todayDate   = brNow.toISOString().slice(0, 10); // YYYY-MM-DD
+        const todayDay    = brNow.getDate(); // 1–31
+
+        const { Op } = require('sequelize');
+        const candidates = await PSModel.findAll({
+          where: {
+            notify_time: currentTime,
+            status:      'active',
+          },
+        });
+
+        for (const schedule of candidates) {
+          try {
+            const isOnce      = schedule.recurrence === 'once';
+            const isMonthly   = schedule.recurrence === 'monthly';
+            const isRecurring = !isOnce;
+
+            // Evita reenvio no mesmo minuto
+            if (schedule.last_notified_at) {
+              const lastStr = new Date(schedule.last_notified_at).toISOString().slice(0, 16); // YYYY-MM-DDTHH:MM
+              const nowStr  = brNow.toISOString().slice(0, 16);
+              if (lastStr === nowStr) continue;
+            }
+
+            let shouldSend = false;
+
+            if (isOnce) {
+              // Dispara apenas no dia do vencimento e se ainda não enviado
+              shouldSend = schedule.due_date === todayDate &&
+                           schedule.notification_status === 'pending';
+            } else if (isMonthly) {
+              // Dispara no dia do mês cadastrado (recurring_day) a cada mês
+              const lastNotifiedDay = schedule.last_notified_at
+                ? new Date(schedule.last_notified_at).toISOString().slice(0, 10)
+                : null;
+              shouldSend = schedule.recurring_day === todayDay &&
+                           lastNotifiedDay !== todayDate;
+            } else {
+              // weekly/yearly: dispara no dia do vencimento
+              const lastNotifiedDay = schedule.last_notified_at
+                ? new Date(schedule.last_notified_at).toISOString().slice(0, 10)
+                : null;
+              shouldSend = schedule.due_date === todayDate &&
+                           lastNotifiedDay !== todayDate;
+            }
+
+            if (!shouldSend) continue;
+
+            // Busca o nome do tenant para personalizar a mensagem
+            const tenant = await TenantModelForNotif.findByPk(schedule.tenant_id, { attributes: ['name'] });
+            const tenantName = tenant?.name || '';
+
+            await notifyClientPayment(schedule, tenantName);
+
+            // Atualiza controle de envio
+            const updates = { last_notified_at: now };
+            if (isOnce) updates.notification_status = 'sent';
+            await schedule.update(updates);
+
+            console.log(`📤 Cobrança enviada: cliente="${schedule.client_name}" tenant="${tenantName}" horário=${currentTime}`);
+          } catch (err) {
+            console.error(`⚠️  Erro ao notificar cobrança ${schedule.id}:`, err.message);
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️  sendScheduledPaymentNotifications:', e.message);
+      }
+    }
+
+    sendScheduledPaymentNotifications();
+    setInterval(sendScheduledPaymentNotifications, 60 * 1000); // a cada minuto
+
     const { Tenant: TenantModel } = require('./models');
     const { Op } = require('sequelize');
     function _toAgentSlug(name) {

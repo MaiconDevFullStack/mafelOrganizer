@@ -90,6 +90,16 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
         comment: 'Mensagem personalizada exibida no corpo da notificação de cobrança via WhatsApp',
       },
+      notify_time: {
+        type: DataTypes.STRING(5),
+        allowNull: true,
+        comment: 'Horário do envio automático da cobrança (HH:MM, horário de Brasília)',
+      },
+      last_notified_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        comment: 'Data/hora do último envio automático realizado',
+      },
     },
     {
       sequelize,
