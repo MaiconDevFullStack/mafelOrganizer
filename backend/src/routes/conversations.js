@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { Conversation, Message, Tenant, KnowledgeBase } = require('../models');
+const { Conversation, Message, Tenant, KnowledgeBase, Appointment, ServiceSlot } = require('../models');
 const { generateGroqReply } = require('../services/groqService');
 
 // GET /conversations?tenant_id=xxx[&status=open|closed|all]
@@ -83,8 +83,11 @@ router.post('/:id/messages', async (req, res) => {
     const tenant = await Tenant.findByPk(conversation.tenant_id);
     const previousMsgs = conversation.messages || [];
 
-    // Chama Groq com KB do tenant
-    const agentReply = await generateGroqReply(text, tenant, previousMsgs, KnowledgeBase);
+    // Chama Groq com KB do tenant + agenda real para cruzar com agendamentos
+    const agentReply = await generateGroqReply(
+      text, tenant, previousMsgs, KnowledgeBase,
+      { Appointment, ServiceSlot },
+    );
 
     const agentMsg = await Message.create({
       conversation_id: conversation.id,

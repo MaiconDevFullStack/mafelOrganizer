@@ -399,6 +399,109 @@ function selectModel(userText, hasKb, historyLen) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// 5b. DETECÇÃO DE INTENÇÃO DE AGENDAMENTO + CONSULTA AO BANCO
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Detecta se a mensagem do cliente trata de agendamento/horários.
+ * Usada para decidir se os slots reais do banco devem ser injetados
+ * no system prompt antes de chamar o modelo.
+ */
+const SCHEDULING_INTENT_RE =
+  /\b(agendar?|marcar?|reservar?|hor[aá]rio[s]?|dispon[ií]vel|disponibilidade|vaga|quando|que dia|que hora|agenda|encaixe|atendo|atendimento|quero marcar|quero agendar)\b/i;
+
+/**
+ * Consulta os slots reais cadastrados pelo prestador (service_slots)
+ * e desconta os já reservados (appointments), retornando apenas os livres.
+ * Lógica idêntica à do schedulingService, duplicada aqui para evitar
+ * dependência circular (schedulingService já importa groqService).
+ *
+ * @param {Object} Appointment  – model Sequelize
+ * @param {Object} ServiceSlot  – model Sequelize
+ * @param {string} tenantId
+ * @returns {Promise<Array<{date: Date, service_name: string|null, duration_minutes: number}>>}
+ */
+async function queryAvailableSlots(Appointment, ServiceSlot, tenantId) {
+  const { Op } = require('sequelize');
+  const DAYS = 14;
+  const MAX  = 10;
+
+  const now    = new Date();
+  const cutoff = new Date(now.getTime() + 60 * 60 * 1000); // mínimo 1h à frente
+  const end    = new Date(now);
+  end.setDate(end.getDate() + DAYS + 1);
+
+  const serviceSlots = await ServiceSlot.findAll({
+    where: { tenant_id: tenantId, is_active: true },
+    order: [['day_of_week', 'ASC'], ['start_time', 'ASC']],
+  });
+  if (!serviceSlots.length) return [];
+
+  // Carrega agendamentos futuros não cancelados
+  const booked = await Appointment.findAll({
+    where: {
+      tenant_id:    tenantId,
+      status:       { [Op.ne]: 'cancelled' },
+      scheduled_at: { [Op.between]: [cutoff, end] },
+    },
+    attributes: ['scheduled_at'],
+  });
+
+  // Mapa ISO → contagem de ocupações
+  const bookingCounts = new Map();
+  for (const a of booked) {
+    const key = new Date(a.scheduled_at).toISOString();
+    bookingCounts.set(key, (bookingCounts.get(key) || 0) + 1);
+  }
+
+  const slots = [];
+  for (let d = 0; d <= DAYS && slots.length < MAX; d++) {
+    const day = new Date(now);
+    day.setDate(day.getDate() + d);
+    const dayOfWeek = day.getDay();
+
+    const daySlots = serviceSlots.filter(s => s.day_of_week === dayOfWeek);
+    for (const ss of daySlots) {
+      if (slots.length >= MAX) break;
+
+      const [hh, mm] = ss.start_time.split(':').map(Number);
+      const slotDate = new Date(day);
+      slotDate.setHours(hh, mm, 0, 0);
+
+      if (slotDate <= cutoff) continue;
+
+      const occupied = bookingCounts.get(slotDate.toISOString()) || 0;
+      if (occupied < (ss.max_bookings || 1)) {
+        slots.push({
+          date:             slotDate,
+          service_name:     ss.service_name || null,
+          duration_minutes: ss.duration_minutes || 60,
+        });
+      }
+    }
+  }
+  return slots;
+}
+
+/**
+ * Formata os slots disponíveis como lista numerada para injeção no system prompt.
+ */
+function formatSlotsText(slots) {
+  if (!slots.length) {
+    return 'Nenhum horário disponível nos próximos 14 dias.';
+  }
+  return slots
+    .map((slot, i) => {
+      const dt      = slot.date;
+      const dateStr = dt.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' });
+      const timeStr = dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      const svc     = slot.service_name ? ` — ${slot.service_name}` : '';
+      return `${i + 1}. ${dateStr} às ${timeStr}${svc}`;
+    })
+    .join('\n');
+}
+
+// ─────────────────────────────────────────────────────────────
 // 6. SUMARIZAÇÃO DO HISTÓRICO
 // ─────────────────────────────────────────────────────────────
 
@@ -456,7 +559,7 @@ async function summarizeHistory(groq, messages) {
  *  - KB presente     → EXCLUSIVAMENTE baseado nos trechos fornecidos
  *  - Resumo incluso  → adiciona contexto do histórico sumarizado
  */
-function buildSystemPrompt(tenant, kbContext, hasKb, historySummary) {
+function buildSystemPrompt(tenant, kbContext, hasKb, historySummary, slotsText = null) {
   const agentName   = tenant.agent_name || 'Assistente';
   const companyName = tenant.name       || 'a empresa';
 
@@ -492,6 +595,14 @@ function buildSystemPrompt(tenant, kbContext, hasKb, historySummary) {
     prompt += `Responda somente com base no contexto da conversa atual. Jamais invente dados específicos como preços, prazos ou procedimentos internos de ${companyName}.\n`;
   }
 
+  // Agenda real: injetada quando queryAvailableSlots retornou dados
+  if (slotsText !== null) {
+    prompt += `\n\n## AGENDA REAL — horários livres (dados em tempo real do banco)\n`;
+    prompt += slotsText + '\n';
+    prompt += `Use SOMENTE estes horários ao responder sobre disponibilidade. `;
+    prompt += `Não mencione horários que não estejam nesta lista.\n`;
+  }
+
   if (historySummary) {
     prompt += `\n\n## Resumo do início desta conversa\n${historySummary}`;
   }
@@ -517,9 +628,10 @@ function buildSystemPrompt(tenant, kbContext, hasKb, historySummary) {
  * @param {Object} tenant        – registro Tenant do Sequelize
  * @param {Array}  previousMsgs  – mensagens anteriores [{author, text}]
  * @param {Object} KnowledgeBase – model Sequelize KnowledgeBase
+ * @param {Object} [extraModels] – { Appointment, ServiceSlot } para cruzar agenda real
  * @returns {Promise<string>}    resposta do agente
  */
-async function generateGroqReply(userText, tenant, previousMsgs = [], KnowledgeBase) {
+async function generateGroqReply(userText, tenant, previousMsgs = [], KnowledgeBase, extraModels = {}) {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey || apiKey === 'seu_groq_api_key_aqui') {
     console.warn('[Groq] GROQ_API_KEY não configurada. Usando resposta fallback.');
@@ -538,6 +650,20 @@ async function generateGroqReply(userText, tenant, previousMsgs = [], KnowledgeB
       console.log(`[Groq] Score TF-IDF=0 para query (sem match lexical) — enviando top chunks para o modelo fazer triagem semântica.`);
     }
 
+    // 2b. Agenda real: cruzamento service_slots × appointments
+    // Ativado quando a mensagem tem intenção de agendamento/horário
+    let slotsText = null;
+    const { Appointment: AppModel, ServiceSlot: SlotModel } = extraModels;
+    if (AppModel && SlotModel && SCHEDULING_INTENT_RE.test(userText)) {
+      try {
+        const liveSlots = await queryAvailableSlots(AppModel, SlotModel, tenant.id);
+        slotsText = formatSlotsText(liveSlots);
+        console.log(`[Groq] Agenda real: ${liveSlots.length} slot(s) livre(s) para tenant=${tenant.id}`);
+      } catch (sErr) {
+        console.warn('[Groq] Falha ao consultar agenda real:', sErr.message);
+      }
+    }
+
     // 3. Histórico: sumariza se muito longo
     const rawHistory = previousMsgs
       .slice(-Math.max(SUMMARY_TRIGGER + HISTORY_KEEP, 20))
@@ -548,8 +674,8 @@ async function generateGroqReply(userText, tenant, previousMsgs = [], KnowledgeB
 
     const { summary, recentHistory } = await summarizeHistory(groq, rawHistory);
 
-    // 4. System prompt KB-exclusivo
-    const sysPrompt = buildSystemPrompt(tenant, kbContext, hasKb, summary);
+    // 4. System prompt KB-exclusivo + agenda real (quando aplicável)
+    const sysPrompt = buildSystemPrompt(tenant, kbContext, hasKb, summary, slotsText);
 
     // 5. Montar mensagens
     const messages = [
@@ -558,20 +684,25 @@ async function generateGroqReply(userText, tenant, previousMsgs = [], KnowledgeB
       { role: 'user',   content: userText },
     ];
 
-    const usingKb = hasKb && !!kbContext.trim();
-    const model   = selectModel(userText, usingKb, recentHistory.length);
+    const usingKb    = hasKb && !!kbContext.trim();
+    const usingSlots  = slotsText !== null;
+    // Agenda real exige modelo forte para interpretar lista corretamente
+    const model = usingSlots
+      ? MODEL_STRONG
+      : selectModel(userText, usingKb, recentHistory.length);
 
     // Parâmetros de geração:
-    // - KB ativo       → temperatura mínima para máxima fidelidade + tokens amplos
-    // - Sem KB / fast  → temperatura levemente maior para naturalidade
-    const temperature = usingKb ? 0.1 : (model === MODEL_FAST ? 0.3 : 0.4);
-    const max_tokens  = usingKb
-      ? (model === MODEL_STRONG ? 1024 : 512)   // KB: resposta pode ser longa
-      : (model === MODEL_FAST   ? 256  : 512);  // sem KB: respostas mais concisas
+    // - KB ou agenda real → temperatura mínima para máxima fidelidade + tokens amplos
+    // - Sem KB / fast     → temperatura levemente maior para naturalidade
+    const useGrounded = usingKb || usingSlots;
+    const temperature = useGrounded ? 0.1 : (model === MODEL_FAST ? 0.3 : 0.4);
+    const max_tokens  = useGrounded
+      ? (model === MODEL_STRONG ? 1024 : 512)   // grounded: resposta pode ser longa
+      : (model === MODEL_FAST   ? 256  : 512);  // sem base: respostas mais concisas
 
     console.log(
       `[Groq] model=${model === MODEL_FAST ? 'FAST(8B)' : 'STRONG(70B)'} ` +
-      `| hasKb=${hasKb} usingKb=${usingKb} relevante=${hasRelevantContent} ` +
+      `| hasKb=${hasKb} usingKb=${usingKb} slots=${usingSlots} relevante=${hasRelevantContent} ` +
       `| temp=${temperature} maxTok=${max_tokens} ` +
       `| hist=${recentHistory.length}${summary ? '+resumo' : ''} ` +
       `| kbChars=${kbContext.length} queryLen=${userText.length}`
@@ -582,8 +713,8 @@ async function generateGroqReply(userText, tenant, previousMsgs = [], KnowledgeB
       messages,
       temperature,
       max_tokens,
-      frequency_penalty: usingKb ? 0.3 : 0.6,  // KB: menos penalidade p/ não cortar factos repetidos da base
-      presence_penalty:  usingKb ? 0.1 : 0.4,  // KB: foco nos termos encontrados
+      frequency_penalty: useGrounded ? 0.3 : 0.6,
+      presence_penalty:  useGrounded ? 0.1 : 0.4,
     });
 
     return completion.choices[0]?.message?.content?.trim() || fallbackReply(userText, tenant);
@@ -714,5 +845,8 @@ if (process.env.NODE_ENV === 'test') {
     selectTopChunks,
     buildSystemPrompt,
     SYNONYM_MAP,
+    SCHEDULING_INTENT_RE,
+    queryAvailableSlots,
+    formatSlotsText,
   };
 }
