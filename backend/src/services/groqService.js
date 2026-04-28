@@ -15,14 +15,16 @@ const MODEL_FAST   = process.env.GROQ_MODEL_FAST   || 'llama-3.1-8b-instant';
 const MODEL_STRONG = process.env.GROQ_MODEL_STRONG || 'llama-3.3-70b-versatile';
 
 // ── Chunking ───────────────────────────────────────────────────
-const CHUNK_SIZE        = 600;   // chars por chunk (menor = mais granular)
-const CHUNK_OVERLAP     = 100;   // sobreposição entre chunks consecutivos
-const TOP_K_RAW         = 10;    // chunks candidatos antes da deduplicação
-const TOP_K_FINAL       = 5;     // chunks finais após deduplicação
-const MAX_KB_CHARS      = 4000;  // limite total de chars de KB no prompt
+const CHUNK_SIZE        = 700;   // chars por chunk (maior = mais contexto por trecho)
+const CHUNK_OVERLAP     = 120;   // sobreposição entre chunks consecutivos
+const TOP_K_RAW         = 14;    // chunks candidatos antes da deduplicação
+const TOP_K_FINAL       = 7;     // chunks finais após deduplicação
+const MAX_KB_CHARS      = 6500;  // limite total de chars de KB no prompt
 // Sem limiar de score mínimo: TF-IDF ranqueia, o LLM decide relevância semântica.
 // Aplicar threshold lexical bloqueia perguntas com sinônimos/paráfrases válidas.
 const JACCARD_THRESHOLD = 0.50;  // similaridade máxima entre chunks (dedup)
+// Peso extra para bigrams no score TF-IDF: melhora frases compostas
+const BIGRAM_BOOST      = 1.5;   // multiplicador de score para bigrams da query
 
 // ── Histórico e sumarização ───────────────────────────────────
 const HISTORY_KEEP     = 6;   // mensagens recentes mantidas íntegras
@@ -183,11 +185,65 @@ function buildIdf(allChunks) {
 function scoreChunk(chunkTokens, queryTokens, idf) {
   const len = chunkTokens.length || 1;
   let score = 0;
+
+  // Unigrams
   for (const qt of queryTokens) {
     const tf = chunkTokens.filter(t => t === qt).length / len;
     score += tf * (idf.get(qt) || 1);
   }
+
+  // Bigrams da query: boost para correspondência de frases compostas
+  // ex.: "valor plano", "prazo entrega", "forma pagamento"
+  const chunkText = chunkTokens.join(' ');
+  for (let i = 0; i < queryTokens.length - 1; i++) {
+    const bigram = `${queryTokens[i]} ${queryTokens[i + 1]}`;
+    const count  = (chunkText.split(bigram).length - 1);
+    if (count > 0) score += (count / len) * BIGRAM_BOOST;
+  }
+
   return score;
+}
+
+// ─────────────────────────────────────────────────────────────
+// 3b. EXPANSÃO LEVE DE QUERY
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Mapa de sinônimos de domínio: expande a query com termos relacionados
+ * para melhorar o recall do TF-IDF sem alterar a intenção do usuário.
+ */
+const SYNONYM_MAP = {
+  // Financeiro / cobranças
+  'preco':     ['valor','custo','preco','mensalidade','tarifa'],
+  'valor':     ['preco','valor','custo','mensalidade','tarifa'],
+  'pagamento': ['pagamento','pagar','cobrar','boleto','fatura','pix','nota'],
+  'boleto':    ['boleto','fatura','cobranca','vencimento'],
+  'desconto':  ['desconto','promocao','oferta','cupom'],
+  'plano':     ['plano','pacote','servico','contrato','modalidade'],
+  // Agendamentos
+  'horario':   ['horario','agendamento','agenda','disponibilidade','turno'],
+  'agendar':   ['agendar','marcar','confirmar','reservar'],
+  'cancelar':  ['cancelar','cancelamento','reagendar','desmarcar'],
+  // Suporte / contato
+  'contato':   ['contato','email','telefone','whatsapp','falar'],
+  'suporte':   ['suporte','atendimento','ajuda','duvida','problema'],
+  'endereco':  ['endereco','localizacao','local','onde','como chegar'],
+  // Prazos / entregas
+  'prazo':     ['prazo','tempo','demora','entrega','quando'],
+  'entrega':   ['entrega','envio','prazo','expedicao','frete'],
+};
+
+/**
+ * Expande os tokens da query com sinônimos do SYNONYM_MAP,
+ * retornando um array de tokens sem duplicatas.
+ */
+function expandQuery(tokens) {
+  const expanded = new Set(tokens);
+  for (const tok of tokens) {
+    const syns = SYNONYM_MAP[tok];
+    if (syns) syns.forEach(s => expanded.add(s));
+  }
+  return [...expanded];
 }
 
 /**
@@ -201,7 +257,8 @@ function scoreChunk(chunkTokens, queryTokens, idf) {
 function selectTopChunks(allChunks, query, kRaw, kFinal) {
   if (!allChunks.length) return { chunks: [], hasRelevantContent: false };
 
-  const queryTokens = tokenize(query);
+  const rawTokens   = tokenize(query);
+  const queryTokens = expandQuery(rawTokens); // expande com sinônimos
   const idf         = buildIdf(allChunks);
 
   // Pontua e ordena
@@ -394,25 +451,31 @@ function buildSystemPrompt(tenant, kbContext, hasKb, historySummary) {
   prompt    += `Nunca se apresente novamente nem repita saudações — o cliente já recebeu a mensagem de boas-vindas.\n`;
 
   if (hasKb && kbContext.trim()) {
-    // Modo KB-exclusivo: respostas apenas com o que está na base
-    prompt += `\n## REGRAS ABSOLUTAS — LEIA ANTES DE RESPONDER\n`;
-    prompt += `1. Você SOMENTE pode responder com informações presentes nos trechos da Base de Conhecimento abaixo.\n`;
-    prompt += `2. Se a resposta NÃO estiver na base, diga exatamente: "Não encontrei essa informação na minha base de conhecimento. Recomendo entrar em contato diretamente com a equipe de ${companyName} para obter essa resposta."\n`;
-    prompt += `3. NUNCA invente, suponha ou complete com conhecimento geral. Se tiver dúvida, recuse.\n`;
-    prompt += `4. Não cite os nomes dos arquivos fonte na resposta ao cliente.\n`;
-    prompt += `5. Se a resposta puder ser dada, seja direto: use a informação da base sem rodeios.\n`;
-    prompt += `\n## Base de Conhecimento — Trechos Relevantes para esta Mensagem\n\n`;
+    // Modo KB-exclusivo: respostas estritamente baseadas nos trechos fornecidos
+    prompt += `\n## REGRAS ABSOLUTAS — BASE DE CONHECIMENTO\n`;
+    prompt += `1. Sua única fonte de verdade são os trechos da Base de Conhecimento abaixo. Não use conhecimento externo.\n`;
+    prompt += `2. Leia TODOS os trechos antes de responder. A resposta pode estar distribuída em mais de um trecho.\n`;
+    prompt += `3. Ao responder, use as informações EXATAMENTE como constam na base: preserve valores, prazos, nomes e regras.\n`;
+    prompt += `4. Se a pergunta não puder ser respondida com base nos trechos fornecidos, responda EXATAMENTE:\n`;
+    prompt += `   "Não encontrei essa informação na minha base de conhecimento. Para mais detalhes, entre em contato diretamente com a equipe de ${companyName}."\n`;
+    prompt += `5. PROIBIDO: inventar, inferir, supor ou complementar com dados que não estejam nos trechos.\n`;
+    prompt += `6. PROIBIDO: citar nomes de arquivos ou referências técnicas internas na resposta.\n`;
+    prompt += `7. Quando houver listas, preços, etapas ou condições na base, reproduza-os de forma organizada (use listas ou tópicos).\n`;
+    prompt += `8. Se a base tiver informação parcial (responde parte da dúvida), forneça o que está disponível e indique o que não foi encontrado.\n`;
+    prompt += `9. Seja direto e objetivo. Não adicione frases genéricas de introdução ou encerramento desnecessárias.\n`;
+    prompt += `\n## BASE DE CONHECIMENTO — trechos selecionados para esta mensagem\n\n`;
     prompt += kbContext;
+    prompt += `\n\n---\n`;
+    prompt += `Responda com base EXCLUSIVAMENTE nos trechos acima. Se a informação não estiver lá, use a frase do item 4.`;
   } else if (hasKb && !kbContext.trim()) {
     // KB existe mas nenhum chunk foi relevante — instruído a recusar
-    prompt += `\nA empresa possui uma base de conhecimento, mas nenhum trecho relevante foi encontrado para esta pergunta específica.\n`;
-    prompt += `Informe ao cliente que não encontrou essa informação e sugira contato direto com a equipe de ${companyName}.\n`;
-    prompt += `NUNCA invente ou suponha informações.\n`;
+    prompt += `\nA empresa possui uma base de conhecimento, mas nenhum trecho relevante foi localizado para esta pergunta.\n`;
+    prompt += `Responda EXATAMENTE: "Não encontrei essa informação na minha base de conhecimento. Para mais detalhes, entre em contato diretamente com a equipe de ${companyName}."\n`;
+    prompt += `NUNCA invente, suponha ou use conhecimento externo.\n`;
   } else {
     // Sem KB configurada
     prompt += `\nNenhuma base de conhecimento foi configurada para este agente ainda.\n`;
-    prompt += `Responda somente com base no contexto da conversa atual e em informações gerais públicas sobre ${companyName}.\n`;
-    prompt += `Jamais invente dados específicos como preços, prazos ou procedimentos internos.\n`;
+    prompt += `Responda somente com base no contexto da conversa atual. Jamais invente dados específicos como preços, prazos ou procedimentos internos de ${companyName}.\n`;
   }
 
   if (historySummary) {
@@ -481,22 +544,32 @@ async function generateGroqReply(userText, tenant, previousMsgs = [], KnowledgeB
       { role: 'user',   content: userText },
     ];
 
-    const model = selectModel(userText, hasKb && !!kbContext.trim(), recentHistory.length);
+    const usingKb = hasKb && !!kbContext.trim();
+    const model   = selectModel(userText, usingKb, recentHistory.length);
+
+    // Parâmetros de geração:
+    // - KB ativo       → temperatura mínima para máxima fidelidade + tokens amplos
+    // - Sem KB / fast  → temperatura levemente maior para naturalidade
+    const temperature = usingKb ? 0.1 : (model === MODEL_FAST ? 0.3 : 0.4);
+    const max_tokens  = usingKb
+      ? (model === MODEL_STRONG ? 1024 : 512)   // KB: resposta pode ser longa
+      : (model === MODEL_FAST   ? 256  : 512);  // sem KB: respostas mais concisas
 
     console.log(
       `[Groq] model=${model === MODEL_FAST ? 'FAST(8B)' : 'STRONG(70B)'} ` +
-      `| hasKb=${hasKb} relevante=${hasRelevantContent} ` +
+      `| hasKb=${hasKb} usingKb=${usingKb} relevante=${hasRelevantContent} ` +
+      `| temp=${temperature} maxTok=${max_tokens} ` +
       `| hist=${recentHistory.length}${summary ? '+resumo' : ''} ` +
-      `| chars=${userText.length}`
+      `| kbChars=${kbContext.length} queryLen=${userText.length}`
     );
 
     const completion = await groq.chat.completions.create({
       model,
       messages,
-      temperature:       model === MODEL_FAST ? 0.2 : 0.4,
-      max_tokens:        model === MODEL_FAST ? 256  : 512,
-      frequency_penalty: 0.6,   // reduz repetição de frases/tokens no output
-      presence_penalty:  0.4,   // incentiva diversidade de conteúdo
+      temperature,
+      max_tokens,
+      frequency_penalty: usingKb ? 0.3 : 0.6,  // KB: menos penalidade p/ não cortar factos repetidos da base
+      presence_penalty:  usingKb ? 0.1 : 0.4,  // KB: foco nos termos encontrados
     });
 
     return completion.choices[0]?.message?.content?.trim() || fallbackReply(userText, tenant);
