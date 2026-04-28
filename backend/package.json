@@ -48,5 +48,12 @@
   },
   "overrides": {
     "plain-crypto-js": "npm:crypto-js@^4.2.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": ["**/__tests__/**/*.test.js"],
+    "testTimeout": 15000,
+    "clearMocks": true,
+    "forceExit": true
   }
 }
