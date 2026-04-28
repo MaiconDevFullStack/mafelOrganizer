@@ -8,6 +8,33 @@ const { KnowledgeBase } = require('../models');
 const Joi = require('joi');
 const { invalidateTenantKbCache } = require('../services/groqService');
 
+// ── Extratores de texto (mesma lógica do groqService) ─────────
+// Extraímos o texto no momento do upload e persistimos no banco.
+// Isso garante que o conteúdo esteja disponível mesmo após o
+// filesystem efêmero do Railway ser limpo num redeploy/restart.
+let pdfParse, mammoth;
+try { pdfParse = require('pdf-parse'); } catch (_) {}
+try { mammoth  = require('mammoth');   } catch (_) {}
+
+async function extractTextFromFile(filepath, filetype) {
+  try {
+    if (filetype === 'txt' || filetype === 'md') {
+      return fs.readFileSync(filepath, 'utf8');
+    }
+    if (filetype === 'pdf' && pdfParse) {
+      const data = await pdfParse(fs.readFileSync(filepath));
+      return data.text || '';
+    }
+    if ((filetype === 'docx' || filetype === 'doc') && mammoth) {
+      const result = await mammoth.extractRawText({ path: filepath });
+      return result.value || '';
+    }
+  } catch (err) {
+    console.warn(`[KB Upload] Falha ao extrair texto: ${err.message}`);
+  }
+  return '';
+}
+
 // ── Diretório de uploads ───────────────────────────────────────
 const UPLOAD_DIR = path.join(__dirname, '../../../uploads/kb');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -72,6 +99,15 @@ router.post('/upload', upload.single('file'), async (req, res) => {
 
     const filetype = ALLOWED_TYPES[req.file.mimetype] || path.extname(req.file.originalname).replace('.', '');
 
+    // Extrai texto imediatamente e persiste no banco para sobreviver
+    // a redeployments (filesystem Railway é efêmero).
+    const extractedContent = await extractTextFromFile(req.file.path, filetype);
+    if (extractedContent) {
+      console.log(`[KB Upload] Texto extraído: ${extractedContent.length} chars de ${req.file.originalname}`);
+    } else {
+      console.warn(`[KB Upload] Nenhum texto extraído de ${req.file.originalname} (tipo: ${filetype})`);
+    }
+
     const doc = await KnowledgeBase.create({
       tenant_id,
       original_name: req.file.originalname,
@@ -79,6 +115,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
       filetype,
       filesize: req.file.size,
       description: description || null,
+      content: extractedContent || null,
       status: 'ready',
     });
 

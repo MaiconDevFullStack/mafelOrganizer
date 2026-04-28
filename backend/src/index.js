@@ -95,6 +95,18 @@ app.listen(PORT, '0.0.0.0', () => {
     const syncOptions = process.env.NODE_ENV === 'production' ? {} : { alter: true };
     await sequelize.sync(syncOptions);
     console.log('✅  Models sincronizados.');
+
+    // ── Migrações coluna a coluna (idempotente, suporta filesystem efêmero) ──
+    // Adiciona colunas novas em produção sem usar alter:true global (lento).
+    try {
+      await sequelize.query(
+        `ALTER TABLE knowledge_bases ADD COLUMN IF NOT EXISTS content TEXT;`
+      );
+      console.log('✅  Coluna knowledge_bases.content garantida.');
+    } catch (migErr) {
+      console.warn('[Migration] Aviso ao garantir coluna content:', migErr.message);
+    }
+
     dbReady = true;
 
     // ── Job: fecha conversas abertas sem atividade há 30 min ──

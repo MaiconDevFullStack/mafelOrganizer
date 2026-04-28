@@ -47,8 +47,22 @@ const CHUNK_CACHE_TTL = 5 * 60 * 1000; // 5 minutos
  * Extrai texto de um doc KB, usando cache baseado em mtime.
  */
 async function extractText(doc) {
+  // ── Prioridade 1: conteúdo persistido no banco ─────────────────
+  // Garante funcionamento mesmo após filesystem ephemero ser limpo
+  // (Railway apaga uploads a cada redeploy/restart).
+  if (doc.content && doc.content.trim()) {
+    const cached = textCache.get(doc.filename);
+    if (cached && cached.mtime === -1) return cached.text; // cache DB hit
+    textCache.set(doc.filename, { text: doc.content.trim(), mtime: -1 });
+    return doc.content.trim();
+  }
+
+  // ── Prioridade 2: arquivo em disco (dev local / first upload) ──
   const filepath = path.join(UPLOAD_DIR, doc.filename);
-  if (!fs.existsSync(filepath)) return '';
+  if (!fs.existsSync(filepath)) {
+    console.warn(`[Groq] Arquivo não encontrado e sem content no banco: ${doc.filename}`);
+    return '';
+  }
 
   const mtime  = fs.statSync(filepath).mtimeMs;
   const cached = textCache.get(doc.filename);

@@ -43,6 +43,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      content: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'Texto extraído do arquivo — persiste mesmo após limpeza do filesystem ephemero',
+      },
       status: {
         type: DataTypes.ENUM('processing', 'ready', 'error'),
         defaultValue: 'ready',
