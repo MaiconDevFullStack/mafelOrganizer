@@ -687,3 +687,18 @@ async function generateWelcome(tenant, KnowledgeBase) {
 }
 
 module.exports = { generateGroqReply, generateWelcome, invalidateTenantKbCache, buildKbContext };
+
+// ── Exportações internas exclusivas para testes unitários ─────
+// Não use em código de produção — utilize apenas em __tests__/
+if (process.env.NODE_ENV === 'test') {
+  module.exports._internals = {
+    tokenize,
+    expandQuery,
+    splitIntoChunks,
+    scoreChunk,
+    buildIdf,
+    selectTopChunks,
+    buildSystemPrompt,
+    SYNONYM_MAP,
+  };
+}
