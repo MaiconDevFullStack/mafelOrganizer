@@ -40,6 +40,22 @@ const META_BASE_URL   = `https://graph.facebook.com/${META_API_VER}`;
 const RETRY_ATTEMPTS  = 3;
 const RETRY_DELAY_MS  = 1_500;
 
+// Log de inicialização — aparece nos logs do Railway/servidor
+console.log(`[WhatsApp] Provider ativo: ${PROVIDER.toUpperCase()}`);
+if (PROVIDER === 'twilio') {
+  const from = process.env.TWILIO_WHATSAPP_FROM || '(não definido)';
+  const sid  = process.env.TWILIO_ACCOUNT_SID   ? '✓ definido' : '✗ AUSENTE';
+  const tok  = process.env.TWILIO_AUTH_TOKEN     ? '✓ definido' : '✗ AUSENTE';
+  console.log(`[WhatsApp] TWILIO_ACCOUNT_SID: ${sid}`);
+  console.log(`[WhatsApp] TWILIO_AUTH_TOKEN:  ${tok}`);
+  console.log(`[WhatsApp] TWILIO_WHATSAPP_FROM: ${from}`);
+  if (!from.startsWith('whatsapp:')) {
+    console.warn('[WhatsApp] ⚠️  TWILIO_WHATSAPP_FROM deve começar com "whatsapp:" — ex: whatsapp:+14155238886');
+  }
+} else if (PROVIDER === 'sms') {
+  console.log(`[WhatsApp] ⚠️  Provider "sms" envia SMS comum, NÃO WhatsApp. Troque para WHATSAPP_PROVIDER=twilio para usar WhatsApp.`);
+}
+
 // ─────────────────────────────────────────────────────────────
 // UTILITÁRIOS
 // ─────────────────────────────────────────────────────────────
