@@ -353,15 +353,21 @@
       };
 
       // ── Sanitiza HTML no texto ───────────────────────────────
+      // Cache memoizado: evita re-processar o mesmo texto a cada $digest do Angular.
+      // Sem o cache, digitar uma letra re-renderizava TODAS as mensagens da lista.
+      var _parseCache = Object.create(null);
       vm.parseText = function (text) {
         if (!text) return '';
+        if (_parseCache[text]) return _parseCache[text];
         var safe = text
           .replace(/&/g, '&amp;')
           .replace(/</g, '&lt;')
           .replace(/>/g, '&gt;')
           .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
           .replace(/\n/g, '<br>');
-        return $sce.trustAsHtml(safe);
+        var trusted = $sce.trustAsHtml(safe);
+        _parseCache[text] = trusted;
+        return trusted;
       };
 
       // ── Helpers ──────────────────────────────────────────────
@@ -426,18 +432,16 @@
         }
       });
 
-      // Auto-resize do textarea — debounce para não enfileirar $timeouts a cada tecla
-      var _resizeTimer = null;
-      $scope.$watch(function () { return vm.inputText; }, function () {
-        if (_resizeTimer) $timeout.cancel(_resizeTimer);
-        _resizeTimer = $timeout(function () {
-          _resizeTimer = null;
-          var el = document.getElementById('chatInput');
-          if (!el) return;
+      // Auto-resize do textarea via evento nativo ‘input’
+      // Não usa $scope.$watch nem $timeout: zero overhead de digest do Angular por tecla.
+      $timeout(function () {
+        var el = document.getElementById('chatInput');
+        if (!el) return;
+        el.addEventListener('input', function () {
           el.style.height = 'auto';
           el.style.height = Math.min(el.scrollHeight, 120) + 'px';
-        }, 30); // 30ms de debounce
-      });
+        });
+      }, 0);
 
       // Inicializar ao carregar
       vm.init();

@@ -7,11 +7,16 @@
   <base href="/" />
   <title ng-bind="tenant.name || 'Atendimento'">Atendimento</title>
 
+  <!-- preconnect para CDNs externas (reduz latência de DNS+TLS) -->
+  <link rel="preconnect" href="https://maxcdn.bootstrapcdn.com" crossorigin />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://ajax.googleapis.com" crossorigin />
+
   <!-- Bootstrap 3 (inclui Glyphicons) -->
   <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css" />
-  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap-theme.min.css" />
 
-  <!-- Google Fonts -->
+  <!-- Google Fonts (display=swap evita FOIT — texto fica visível com fallback enquanto carrega) -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 
   <!-- Estilos personalizados -->
@@ -141,6 +146,7 @@
             class="chat-input"
             placeholder="{{vm.bookingStep ? 'Digite sua resposta...' : 'Digite sua mensagem...'}} "
             ng-model="vm.inputText"
+            ng-model-options="{debounce: 0, updateOn: 'default'}"
             ng-keydown="vm.handleKeydown($event)"
             maxlength="1000"
             rows="1"
@@ -173,9 +179,11 @@
   <!-- ══════════════════════════════════════════════════════════
        SCRIPTS
   ══════════════════════════════════════════════════════════════ -->
-  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.3/angular.min.js"></script>
-  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.3/angular-sanitize.min.js"></script>
-  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
-  <script src="js/app.js"></script>
+  <!-- AngularJS carregado de forma assíncrona; defer garante que o HTML já foi
+       parseado antes de executar, acelerando o First Contentful Paint. -->
+  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.3/angular.min.js" defer></script>
+  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.3/angular-sanitize.min.js" defer></script>
+  <!-- Bootstrap JS removido: o chat não usa componentes JS do Bootstrap (modais, tooltips, etc.) -->
+  <script src="js/app.js" defer></script>
 </body>
 </html>

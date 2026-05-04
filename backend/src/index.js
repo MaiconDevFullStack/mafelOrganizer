@@ -59,7 +59,18 @@ app.get('/', (req, res) => {
 });
 
 // ── Servir frontend estático ──────────────────────────────────
-app.use(express.static(path.join(__dirname, '../../frontend')));
+// Arquivos de assets recebem cache de 7 dias; index.html nunca é cacheado.
+app.use(express.static(path.join(__dirname, '../../frontend'), {
+  setHeaders(res, filePath) {
+    // Nunca cachear o HTML (o SPA precisa da versão mais recente)
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    } else {
+      // CSS, JS, imagens: cache imutável de 7 dias
+      res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+    }
+  },
+}));
 
 // ── Rotas da API ──────────────────────────────────────────────
 app.use('/api/auth',          authRouter);
@@ -73,7 +84,15 @@ app.use('/api/scheduling',    schedulingRouter);
 app.use('/api/whatsapp',      whatsappRouter);
 
 // ── Fallback SPA ──────────────────────────────────────────────
+// Retorna index.html APENAS para rotas de navegação (sem extensão de arquivo).
+// Requisições para arquivos inexistentes (.js, .css, .png, etc.) recebem 404
+// para evitar que o browser tente baixar o HTML como se fosse o arquivo pedido.
 app.get('*', (req, res) => {
+  const hasExtension = /\.([a-zA-Z0-9]{1,8})$/.test(req.path);
+  if (hasExtension) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(__dirname, '../../frontend/index.html'));
 });
 
