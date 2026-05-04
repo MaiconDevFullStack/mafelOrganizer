@@ -17,12 +17,12 @@ const MODEL_STRONG = process.env.GROQ_MODEL_STRONG || 'llama-3.3-70b-versatile';
 // ── Chunking ───────────────────────────────────────────────────
 const CHUNK_SIZE        = 700;   // chars por chunk (maior = mais contexto por trecho)
 const CHUNK_OVERLAP     = 120;   // sobreposição entre chunks consecutivos
-const TOP_K_RAW         = 14;    // chunks candidatos antes da deduplicação
-const TOP_K_FINAL       = 7;     // chunks finais após deduplicação
-const MAX_KB_CHARS      = 6500;  // limite total de chars de KB no prompt
+const TOP_K_RAW         = 16;    // chunks candidatos antes da deduplicação
+const TOP_K_FINAL       = 8;     // chunks finais após deduplicação
+const MAX_KB_CHARS      = 7000;  // limite total de chars de KB no prompt
 // Sem limiar de score mínimo: TF-IDF ranqueia, o LLM decide relevância semântica.
 // Aplicar threshold lexical bloqueia perguntas com sinônimos/paráfrases válidas.
-const JACCARD_THRESHOLD = 0.50;  // similaridade máxima entre chunks (dedup)
+const JACCARD_THRESHOLD = 0.40;  // similaridade máxima entre chunks (dedup) — mais baixo = menos chunks descartados
 // Peso extra para bigrams no score TF-IDF: melhora frases compostas
 const BIGRAM_BOOST      = 1.5;   // multiplicador de score para bigrams da query
 
@@ -172,13 +172,40 @@ const STOPWORDS = new Set([
   'muito','pouco','mesmo','ainda','onde','quando','quem','qual','quais','como',
 ]);
 
+// ─────────────────────────────────────────────────────────────
+// STEMMER PORTUGUES MINIMALISTA
+// Normaliza plurais, aumentativos e terminações verbais comuns,
+// garantindo que "serviços" (query) case com "serviço" (KB) etc.
+// Opera sobre texto já sem acentos (após NFD), por isso usa 'c','a','o'.
+// ─────────────────────────────────────────────────────────────
+function stemPT(word) {
+  const len = word.length;
+  if (len <= 4) return word; // palavras muito curtas: sem corte
+  // -coes → -cao  (informacoes → informacao, situacoes → situacao)
+  if (len > 6 && word.endsWith('coes')) return word.slice(0, -4) + 'cao';
+  // -oes  → -ao   (posicoes após o caso acima já tratado; restam: versoes→ versao)
+  if (len > 5 && word.endsWith('oes'))  return word.slice(0, -3) + 'ao';
+  // -veis → -vel  (disponiveis → disponivel, compativeis → compativel)
+  if (len > 6 && word.endsWith('veis')) return word.slice(0, -4) + 'vel';
+  // -eis  → -el   (possiveis já tratado acima; papeis → papel)
+  if (len > 5 && word.endsWith('eis'))  return word.slice(0, -3) + 'el';
+  // -ais  → -al   (normais → normal, mensais → mensal)
+  if (len > 5 && word.endsWith('ais'))  return word.slice(0, -3) + 'al';
+  // -es   → remove (valores → valor, prazoes→prazo, etc.) — exceto -ses (processos)
+  if (len > 6 && word.endsWith('es') && !word.endsWith('ses')) return word.slice(0, -2);
+  // -s    → remove (servicos → servico, horarios → horario, precos → preco)
+  if (len > 4 && word.endsWith('s'))   return word.slice(0, -1);
+  return word;
+}
+
 function tokenize(text) {
   return text
     .toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // remove acentos
     .replace(/[^\w\s]/g, ' ')
     .split(/\s+/)
-    .filter(t => t.length > 2 && !STOPWORDS.has(t));
+    .filter(t => t.length > 2 && !STOPWORDS.has(t))
+    .map(stemPT);  // normaliza plurais/flexões para melhorar recall
 }
 
 function buildIdf(allChunks) {
@@ -226,25 +253,43 @@ function scoreChunk(chunkTokens, queryTokens, idf) {
  * Mapa de sinônimos de domínio: expande a query com termos relacionados
  * para melhorar o recall do TF-IDF sem alterar a intenção do usuário.
  */
+// SYNONYM_MAP: expande tokens da query com termos relacionados para melhorar
+// o recall do TF-IDF. Todas as chaves e valores DEVEM estar sem acento
+// (já que tokenize() remove acentos antes de chamar expandQuery).
+// Após stemPT, plurais já são normalizados; usar formas no singular aqui.
 const SYNONYM_MAP = {
   // Financeiro / cobranças
-  'preco':     ['valor','custo','preco','mensalidade','tarifa'],
-  'valor':     ['preco','valor','custo','mensalidade','tarifa'],
-  'pagamento': ['pagamento','pagar','cobrar','boleto','fatura','pix','nota'],
-  'boleto':    ['boleto','fatura','cobranca','vencimento'],
-  'desconto':  ['desconto','promocao','oferta','cupom'],
-  'plano':     ['plano','pacote','servico','contrato','modalidade'],
-  // Agendamentos
-  'horario':   ['horario','agendamento','agenda','disponibilidade','turno'],
-  'agendar':   ['agendar','marcar','confirmar','reservar'],
-  'cancelar':  ['cancelar','cancelamento','reagendar','desmarcar'],
+  'preco':       ['valor','custo','preco','mensalidade','tarifa','taxa','investimento','orcamento'],
+  'valor':       ['preco','valor','custo','mensalidade','tarifa','taxa','investimento','orcamento'],
+  'taxa':        ['taxa','tarifa','preco','valor','cobranca','custo'],
+  'pagamento':   ['pagamento','pagar','cobrar','boleto','fatura','pix','nota','recebimento','debito'],
+  'boleto':      ['boleto','fatura','cobranca','vencimento','pagar'],
+  'desconto':    ['desconto','promocao','oferta','cupom','beneficio','reducao'],
+  'plano':       ['plano','pacote','servico','contrato','modalidade','opcao','categoria'],
+  'mensalidade': ['mensalidade','preco','valor','taxa','plano','assinatura','cobranca'],
+  'gratuito':    ['gratuito','gratis','free','sem custo','cortesia'],
+  // Agendamentos / horários
+  'horario':     ['horario','agendamento','agenda','disponibilidade','turno','vaga','encaixe','atendimento'],
+  'agendar':     ['agendar','marcar','confirmar','reservar','solicitar','contratar'],
+  'cancelar':    ['cancelar','cancelamento','reagendar','desmarcar','remover','encerrar'],
+  'disponivel':  ['disponivel','disponibilidade','livre','vaga','horario','agenda'],
+  // Serviços / produtos
+  'servico':     ['servico','produto','solucao','trabalho','atividade','modalidade','oferta'],
+  'funcionamento': ['funcionamento','como funciona','processo','etapa','procedimento','passo'],
+  'regra':       ['regra','politica','condicao','norma','clausula','requisito','exigencia','termo'],
+  'prazo':       ['prazo','tempo','demora','duracao','periodo','quando','data','limite'],
+  'entrega':     ['entrega','envio','prazo','expedicao','frete','recebimento','logistica'],
   // Suporte / contato
-  'contato':   ['contato','email','telefone','whatsapp','falar'],
-  'suporte':   ['suporte','atendimento','ajuda','duvida','problema'],
-  'endereco':  ['endereco','localizacao','local','onde','como chegar'],
-  // Prazos / entregas
-  'prazo':     ['prazo','tempo','demora','entrega','quando'],
-  'entrega':   ['entrega','envio','prazo','expedicao','frete'],
+  'contato':     ['contato','email','telefone','whatsapp','falar','ligar','escrever','atendimento'],
+  'suporte':     ['suporte','atendimento','ajuda','duvida','problema','assistencia','apoio'],
+  'endereco':    ['endereco','localizacao','local','onde','como chegar','rua','bairro','cidade'],
+  // Documentos / cadastro
+  'documento':   ['documento','rg','cpf','cnpj','comprovante','certidao','contrato','formulario'],
+  'cadastro':    ['cadastro','registro','inscricao','conta','perfil','dados','informacao'],
+  'requisito':   ['requisito','exigencia','necessario','obrigatorio','precisa','deve','preciso'],
+  // Qualidade / avaliação
+  'garantia':    ['garantia','assegurar','certificar','qualidade','padrao','responsabilidade'],
+  'resultado':   ['resultado','retorno','beneficio','ganho','efeito','vantagem','diferencial'],
 };
 
 /**
@@ -331,11 +376,17 @@ async function buildKbContext(KnowledgeBase, tenantId, userQuery) {
   if (!docs.length) return { context: '', hasKb: false, hasRelevantContent: false };
 
   // ── Cache de chunks por tenant ──────────────────────────────
+  // A chave de invalidação inclui o hash dos IDs+updatedAt dos docs,
+  // garantindo que qualquer atualização na KB descarte o cache imediatamente.
+  const docsHash = docs.map(d => `${d.id}:${d.updated_at || d.updatedAt}`).join('|');
   let allChunks;
   const cached = chunkCache.get(tenantId);
-  if (cached && (Date.now() - cached.ts) < CHUNK_CACHE_TTL) {
+  if (cached && cached.docsHash === docsHash && (Date.now() - cached.ts) < CHUNK_CACHE_TTL) {
     allChunks = cached.chunks;
   } else {
+    if (cached && cached.docsHash !== docsHash) {
+      console.log(`[Groq] Cache KB invalidado por mudança nos docs: tenant=${tenantId}`);
+    }
     allChunks = [];
     for (const doc of docs) {
       const text = await extractText(doc);
@@ -346,7 +397,7 @@ async function buildKbContext(KnowledgeBase, tenantId, userQuery) {
         allChunks.push({ source: doc.original_name, text: doc.description.trim() });
       }
     }
-    chunkCache.set(tenantId, { chunks: allChunks, ts: Date.now() });
+    chunkCache.set(tenantId, { chunks: allChunks, docsHash, ts: Date.now() });
     console.log(`[Groq] Cache KB: tenant=${tenantId} chunks=${allChunks.length}`);
   }
 
@@ -838,6 +889,7 @@ module.exports = { generateGroqReply, generateWelcome, invalidateTenantKbCache, 
 if (process.env.NODE_ENV === 'test') {
   module.exports._internals = {
     tokenize,
+    stemPT,
     expandQuery,
     splitIntoChunks,
     scoreChunk,
