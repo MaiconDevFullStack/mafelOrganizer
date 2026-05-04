@@ -921,8 +921,18 @@
           </div>
           <div class="col-sm-4">
             <div class="form-group">
-              <label>Telefone do Cliente</label>
-              <input class="form-control" ng-model="vm.pForm.client_phone" placeholder="(11) 99999-9999" />
+              <label>Telefone do Cliente
+                <span ng-show="vm.pForm.notify_time" class="label label-success" style="font-size:10px;margin-left:4px">
+                  <span class="glyphicon glyphicon-phone-alt"></span> WhatsApp automático
+                </span>
+                <span ng-show="!vm.pForm.notify_time" class="text-muted" style="font-size:11px;margin-left:4px">(obrigatório para envio automático)</span>
+              </label>
+              <input class="form-control" ng-model="vm.pForm.client_phone" placeholder="(11) 99999-9999"
+                     ng-class="{'has-error-input': vm.pForm.notify_time && !vm.pForm.client_phone}" />
+              <span class="help-block text-danger" style="font-size:11px"
+                    ng-show="vm.pForm.notify_time && !vm.pForm.client_phone">
+                Necessário para o envio automático via WhatsApp.
+              </span>
             </div>
           </div>
         </div>
@@ -980,19 +990,46 @@
           </div>
         </div>
 
-        <!-- ── Horário do envio automático ────────────────────── -->
+        <!-- ── Horário de envio automático via WhatsApp ────────── -->
         <div class="row">
           <div class="col-sm-4">
             <div class="form-group">
               <label>
                 <span class="glyphicon glyphicon-time" style="margin-right:4px"></span>
-                Horário da cobrança
-                <small class="text-muted">(envio automático)</small>
+                Horário de envio via WhatsApp
               </label>
               <input type="text" class="form-control" ng-model="vm.pForm.notify_time"
                      placeholder="09:00" maxlength="5"
                      pattern="([01][0-9]|2[0-3]):[0-5][0-9]" />
-              <span class="help-block" style="font-size:11px">Formato HH:MM. Deixe em branco para não enviar automaticamente.</span>
+              <span class="help-block" style="font-size:11px">
+                Formato HH:MM (horário de Brasília). Deixe em branco para não enviar automaticamente.
+              </span>
+            </div>
+          </div>
+          <!-- Indicador visual: confirma como a cobrança será enviada -->
+          <div class="col-sm-8" ng-show="vm.pForm.notify_time && vm.pForm.client_phone">
+            <div class="well well-sm" style="margin-top:24px;background:#f0fdf4;border-color:#86efac;font-size:12px;padding:8px 12px">
+              <strong style="color:#15803d">
+                <span class="glyphicon glyphicon-ok-circle"></span>
+                Envio automático configurado
+              </strong><br />
+              <span ng-switch="vm.pForm.recurrence">
+                <span ng-switch-when="once">
+                  📲 Uma notificação será enviada via WhatsApp para <strong>{{vm.pForm.client_phone}}</strong> no dia do vencimento às <strong>{{vm.pForm.notify_time}}</strong>.
+                </span>
+                <span ng-switch-when="weekly">
+                  📲 Cobrança <strong>semanal</strong> — WhatsApp enviado toda semana às <strong>{{vm.pForm.notify_time}}</strong> para <strong>{{vm.pForm.client_phone}}</strong>.
+                </span>
+                <span ng-switch-when="monthly">
+                  📲 Cobrança <strong>mensal</strong> — WhatsApp enviado todo mês no dia <strong>{{vm.pForm.recurring_day || vm.pForm.due_date}}</strong> às <strong>{{vm.pForm.notify_time}}</strong> para <strong>{{vm.pForm.client_phone}}</strong>.
+                </span>
+                <span ng-switch-when="yearly">
+                  📲 Cobrança <strong>anual</strong> — WhatsApp enviado uma vez por ano às <strong>{{vm.pForm.notify_time}}</strong> para <strong>{{vm.pForm.client_phone}}</strong>.
+                </span>
+                <span ng-switch-default>
+                  📲 WhatsApp será enviado automaticamente às <strong>{{vm.pForm.notify_time}}</strong> para <strong>{{vm.pForm.client_phone}}</strong>.
+                </span>
+              </span>
             </div>
           </div>
         </div>

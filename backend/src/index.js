@@ -178,39 +178,59 @@ app.listen(PORT, '0.0.0.0', () => {
       return toBrDate(new Date());
     }
 
-    // ── Reset mensal: devolve notification_status=pending para cobranças
-    //    recorrentes cujo last_notified_at é de um mês anterior ao atual.
-    //    Isso espelha exatamente o comportamento de "once":
-    //    pending → (envia) → sent → (mês vira) → pending → ...
-    async function resetMonthlyNotificationStatus() {
+    // ── Reset de notification_status para cobranças recorrentes ─────────────
+    // Cada tipo de recorrência tem sua própria janela de reset:
+    //   monthly → reseta quando last_notified_at é do mês anterior
+    //   weekly  → reseta quando last_notified_at foi há >= 6 dias (próxima semana)
+    //   yearly  → reseta quando last_notified_at foi há >= 11 meses
+    async function resetRecurrenceNotificationStatus() {
       try {
         const { Op } = require('sequelize');
-        const br = brNow();
-        // Primeiro dia do mês atual em UTC (para comparar com last_notified_at que fica em UTC)
-        // Converte: primeiro dia do mês BR → UTC equivalente
+        const now = new Date();
+        const br  = toBrDate(now);
+
+        // monthly: reseta no primeiro dia do mês atual (em relação ao UTC)
         const firstOfMonthBR = new Date(Date.UTC(br.getUTCFullYear(), br.getUTCMonth(), 1) + 3 * 60 * 60 * 1000);
 
-        const updated = await PSModel.update(
-          { notification_status: 'pending' },
-          {
-            where: {
-              recurrence:          { [Op.in]: ['monthly', 'weekly', 'yearly'] },
-              notification_status: 'sent',
-              last_notified_at:    { [Op.lt]: firstOfMonthBR },
-            },
-          }
-        );
-        const count = Array.isArray(updated) ? updated[0] : 0;
-        if (count > 0) console.log(`🔄 ${count} cobrança(s) recorrente(s) resetada(s) para pending (novo mês).`);
+        // weekly: last_notified_at há mais de 6 dias (144h)
+        const sixDaysAgo = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
+
+        // yearly: last_notified_at há mais de 335 dias (quase 1 ano)
+        const elevenMonthsAgo = new Date(now.getTime() - 335 * 24 * 60 * 60 * 1000);
+
+        const results = await Promise.all([
+          // monthly
+          PSModel.update(
+            { notification_status: 'pending' },
+            { where: { recurrence: 'monthly', notification_status: 'sent', last_notified_at: { [Op.lt]: firstOfMonthBR } } }
+          ),
+          // weekly
+          PSModel.update(
+            { notification_status: 'pending' },
+            { where: { recurrence: 'weekly',  notification_status: 'sent', last_notified_at: { [Op.lt]: sixDaysAgo } } }
+          ),
+          // yearly
+          PSModel.update(
+            { notification_status: 'pending' },
+            { where: { recurrence: 'yearly',  notification_status: 'sent', last_notified_at: { [Op.lt]: elevenMonthsAgo } } }
+          ),
+        ]);
+
+        const totalReset = results.reduce((acc, r) => acc + (Array.isArray(r) ? r[0] : 0), 0);
+        if (totalReset > 0) {
+          console.log(`🔄 ${totalReset} cobrança(s) recorrente(s) reativada(s) (weekly/monthly/yearly).`);
+        }
       } catch (e) {
-        console.warn('⚠️  resetMonthlyNotificationStatus:', e.message);
+        console.warn('⚠️  resetRecurrenceNotificationStatus:', e.message);
       }
     }
 
     // ── Job principal: roda a cada minuto ────────────────────────────
-    // Mesmo padrão para once e recorrentes:
-    //   notification_status = 'pending'  →  verifica horário/dia  →  envia  →  'sent'
-    // No início de cada mês, resetMonthlyNotificationStatus() devolve 'pending'.
+    // Lógica de dispáro por tipo de recorrência:
+    //   once    → confirma que due_date === hoje
+    //   monthly → confirma que recurring_day === dia do mês de hoje
+    //   weekly  → confirma que hoje >= due_date E (hoje - due_date) % 7 === 0 dias
+    //   yearly  → confirma que mês+dia de due_date === mês+dia de hoje
     async function sendScheduledPaymentNotifications() {
       try {
         const now         = new Date();
@@ -220,39 +240,67 @@ app.listen(PORT, '0.0.0.0', () => {
         const currentTime = `${brHH}:${brMM}`;
         const todayDate   = br.toISOString().slice(0, 10);
         const todayDay    = br.getUTCDate();
+        const todayMonth  = br.getUTCMonth() + 1; // 1-12
 
         const { Op } = require('sequelize');
 
-        // Todos os registros pendentes cujo notify_time bate com o minuto atual
+        // Todos os registros ativos e pendentes cujo notify_time bate com o minuto atual
         const candidates = await PSModel.findAll({
           where: {
+            status:              'active',
             notification_status: 'pending',
-            notify_time: { [Op.like]: `${currentTime}%` },
+            notify_time:         { [Op.like]: `${currentTime}%` },
           },
         });
 
         for (const schedule of candidates) {
           try {
-            // Verifica se o dia correto chegou
             let shouldSend = false;
+
             if (schedule.recurrence === 'once') {
-              shouldSend = schedule.due_date === todayDate;
+              // Dispara exatamente no dia de vencimento
+              shouldSend = (schedule.due_date === todayDate);
+
             } else if (schedule.recurrence === 'monthly') {
-              shouldSend = Number(schedule.recurring_day) === todayDay;
-            } else {
-              // weekly / yearly: dispara no dia do vencimento
-              shouldSend = schedule.due_date === todayDate;
+              // Dispara todo mês no dia configurado
+              shouldSend = (Number(schedule.recurring_day) === todayDay);
+
+            } else if (schedule.recurrence === 'weekly') {
+              // Dispara a cada 7 dias a partir do due_date original
+              const dueParts = (schedule.due_date || '').split('-').map(Number);
+              if (dueParts.length === 3) {
+                const dueMs   = Date.UTC(dueParts[0], dueParts[1] - 1, dueParts[2]);
+                const todayMs = Date.UTC(
+                  br.getUTCFullYear(), br.getUTCMonth(), br.getUTCDate()
+                );
+                const diffDays = Math.round((todayMs - dueMs) / 86_400_000);
+                shouldSend = (diffDays >= 0 && diffDays % 7 === 0);
+              }
+
+            } else if (schedule.recurrence === 'yearly') {
+              // Dispara todo ano no mesmo mês e dia do due_date
+              const dueParts = (schedule.due_date || '').split('-').map(Number);
+              if (dueParts.length === 3) {
+                shouldSend = (dueParts[1] === todayMonth && dueParts[2] === todayDay);
+              }
             }
+
             if (!shouldSend) continue;
+
+            if (!schedule.client_phone) {
+              console.warn(`[Cobrança] Sem telefone para ${schedule.client_name} (id=${schedule.id}). Pulando.`);
+              continue;
+            }
 
             const tenant = await TenantModelForNotif.findByPk(schedule.tenant_id, { attributes: ['name'] });
             await notifyClientPayment(schedule, tenant?.name || '');
 
-            // Marca como enviado — resetMonthlyNotificationStatus() devolve 'pending' no mês seguinte
+            // Marca como enviado — resetRecurrenceNotificationStatus() devolve 'pending' no próximo ciclo
             await schedule.update({ notification_status: 'sent', last_notified_at: now });
 
-            console.log(`📤 Notificação enviada: cliente="${schedule.client_name}" recorrência=${schedule.recurrence} data=${todayDate} horário=${currentTime}`);
+            console.log(`📤 Notificado: "${schedule.client_name}" recorrência=${schedule.recurrence} data=${todayDate} horário=${currentTime}`);
           } catch (err) {
+            await schedule.update({ notification_status: 'failed' }).catch(() => {});
             console.error(`⚠️  Erro ao notificar cobrança ${schedule.id}:`, err.message);
           }
         }
@@ -261,7 +309,7 @@ app.listen(PORT, '0.0.0.0', () => {
       }
     }
 
-    // ── Catch-up: recupera notificações pendentes do dia que foram perdidas
+    // ── Catch-up: recupera notificações pend pend entes do dia que foram perdidas
     //    (ex: servidor reiniciado depois do horário cadastrado)
     async function catchUpTodayNotifications() {
       try {
@@ -269,29 +317,44 @@ app.listen(PORT, '0.0.0.0', () => {
         const br        = toBrDate(now);
         const todayDate = br.toISOString().slice(0, 10);
         const todayDay  = br.getUTCDate();
+        const todayMonth = br.getUTCMonth() + 1;
         const nowMin    = br.getUTCHours() * 60 + br.getUTCMinutes();
 
         const { Op } = require('sequelize');
 
         const missed = await PSModel.findAll({
           where: {
+            status:              'active',
             notification_status: 'pending',
-            notify_time: { [Op.ne]: null },
+            notify_time:         { [Op.ne]: null },
           },
         });
 
         for (const schedule of missed) {
           try {
-            // Verifica se o dia correto é hoje
+            // Verifica se o dia correto é hoje (mesma lógica do job principal)
             let isToday = false;
             if (schedule.recurrence === 'once') {
-              isToday = schedule.due_date === todayDate;
+              isToday = (schedule.due_date === todayDate);
             } else if (schedule.recurrence === 'monthly') {
-              isToday = Number(schedule.recurring_day) === todayDay;
-            } else {
-              isToday = schedule.due_date === todayDate;
+              isToday = (Number(schedule.recurring_day) === todayDay);
+            } else if (schedule.recurrence === 'weekly') {
+              const dueParts = (schedule.due_date || '').split('-').map(Number);
+              if (dueParts.length === 3) {
+                const dueMs   = Date.UTC(dueParts[0], dueParts[1] - 1, dueParts[2]);
+                const todayMs = Date.UTC(br.getUTCFullYear(), br.getUTCMonth(), br.getUTCDate());
+                const diffDays = Math.round((todayMs - dueMs) / 86_400_000);
+                isToday = (diffDays >= 0 && diffDays % 7 === 0);
+              }
+            } else if (schedule.recurrence === 'yearly') {
+              const dueParts = (schedule.due_date || '').split('-').map(Number);
+              if (dueParts.length === 3) {
+                isToday = (dueParts[1] === todayMonth && dueParts[2] === todayDay);
+              }
             }
             if (!isToday) continue;
+
+            if (!schedule.client_phone) continue;
 
             // Só envia se o horário já passou
             const [hh, mm] = schedule.notify_time.split(':').map(Number);
@@ -311,12 +374,12 @@ app.listen(PORT, '0.0.0.0', () => {
       }
     }
 
-    await resetMonthlyNotificationStatus(); // garante pending correto ao iniciar
-    await catchUpTodayNotifications();       // recupera perdidos do dia
+    await resetRecurrenceNotificationStatus(); // garante pending correto ao iniciar
+    await catchUpTodayNotifications();          // recupera perdidos do dia
     sendScheduledPaymentNotifications();
     setInterval(sendScheduledPaymentNotifications, 60 * 1000);
-    // Reset mensal roda também uma vez por dia (meia-noite BR = 03:00 UTC)
-    setInterval(resetMonthlyNotificationStatus, 60 * 60 * 1000);
+    // Reset de recorrência roda a cada hora (weekly detectado em até 1h após janela)
+    setInterval(resetRecurrenceNotificationStatus, 60 * 60 * 1000);
 
     const { Tenant: TenantModel } = require('./models');
     const { Op } = require('sequelize');

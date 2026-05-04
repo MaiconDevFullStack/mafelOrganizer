@@ -491,8 +491,17 @@
           }
           if (!vm.pForm.amount || vm.pForm.amount <= 0) {
             notify('Informe um valor válido maior que zero.', 'error'); return;
+          }          // Se horário de notificação foi preenchido, telefone é obrigatório
+          if (vm.pForm.notify_time && vm.pForm.notify_time.trim()) {
+            if (!vm.pForm.client_phone || !vm.pForm.client_phone.trim()) {
+              notify('Para envio automático via WhatsApp, o telefone do cliente é obrigatório.', 'error'); return;
+            }
+            // Valida formato HH:MM
+            var timeRegex = /^([01]\d|2[0-3]):[0-5]\d$/;
+            if (!timeRegex.test(vm.pForm.notify_time.trim())) {
+              notify('Horário inválido. Use o formato HH:MM (ex: 09:00).', 'error'); return;
+            }
           }
-
           /* ── Data: recorrente (dia do mês) ou data completa ── */
           if (vm.pForm.is_recurring) {
             var rd = parseInt(vm.pForm.recurring_day, 10);
@@ -531,7 +540,15 @@
             .then(function (r) {
               var type = payload.type || r.data.type;
               vm.modals.pay = false;
-              notify('Lançamento salvo com sucesso!', 'success');
+              // Mensagem de sucesso informativa sobre o WhatsApp automático
+              var hasWhatsapp = !!(payload.notify_time && payload.client_phone);
+              var msg = 'Lançamento salvo com sucesso!';
+              if (hasWhatsapp) {
+                var recLabel = { once: 'único', weekly: 'semanal', monthly: 'mensal', yearly: 'anual' };
+                var rec = recLabel[payload.recurrence] || payload.recurrence;
+                msg += ' 📲 Cobrança ' + rec + ' agendada para envio automático via WhatsApp às ' + payload.notify_time + '.';
+              }
+              notify(msg, 'success');
               // Recarrega lista completa para garantir dados frescos
               loadPayments(type);
               loadStats();
