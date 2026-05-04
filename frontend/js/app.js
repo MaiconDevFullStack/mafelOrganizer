@@ -100,12 +100,27 @@
 
       // ── Inicialização ────────────────────────────────────────
       vm.init = function () {
-        var info = CONFIG.getTenantInfo();
+        var info    = CONFIG.getTenantInfo();
+        var cacheKey = 'mafel_conv_' + info.slug;
 
         ApiService.getTenant(info)
           .then(function (res) {
             vm.tenant = res.data;
             vm.applyTenantTheme(vm.tenant);
+
+            // Reutiliza conversa existente na mesma aba (evita round-trip desnecessário)
+            var cachedConvId = sessionStorage.getItem(cacheKey);
+            if (cachedConvId) {
+              vm.conversationId = cachedConvId;
+              _resetInactivityTimer();
+              // Exibe saudação mínima sem aguardar servidor
+              vm.messages.push({
+                author:     'agent',
+                text:       vm.tenant.welcome_message || 'Olá! Como posso ajudar?',
+                created_at: new Date(),
+              });
+              return null; // pula startConversation
+            }
 
             return ApiService.startConversation(
               vm.tenant.id,
@@ -114,9 +129,10 @@
             );
           })
           .then(function (res) {
+            if (!res) return; // sessão reutilizada — nada a fazer
             vm.conversationId = res.data.id;
-            _resetInactivityTimer(); // começa a contar inatividade
-            // Mostra a saudação dinâmica gerada pelo Groq no backend
+            sessionStorage.setItem(cacheKey, vm.conversationId);
+            _resetInactivityTimer();
             if (res.data.welcomeMessage) {
               vm.messages.push({
                 author:     'agent',
@@ -366,7 +382,10 @@
 
       function _closeSession() {
         if (!vm.conversationId) return;
-        var url = '/api/conversations/' + vm.conversationId + '/close';
+        var url      = '/api/conversations/' + vm.conversationId + '/close';
+        var info     = CONFIG.getTenantInfo();
+        var cacheKey = 'mafel_conv_' + info.slug;
+        sessionStorage.removeItem(cacheKey); // limpa cache ao encerrar
         if (navigator.sendBeacon) {
           navigator.sendBeacon(url);
         } else {
