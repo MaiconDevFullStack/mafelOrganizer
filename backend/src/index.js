@@ -253,6 +253,17 @@ app.listen(PORT, '0.0.0.0', () => {
           },
         });
 
+        // Log de atividade do job (visível nos logs do Railway)
+        if (candidates.length > 0) {
+          console.log(`[Job Cobranças] ${currentTime} BR — ${candidates.length} candidato(s) encontrado(s).`);
+        } else {
+          // Log a cada 10 minutos para confirmar que o job está rodando
+          const brMin = br.getUTCMinutes();
+          if (brMin % 10 === 0) {
+            console.log(`[Job Cobranças] ${currentTime} BR — ativo, nenhuma cobrança pendente neste minuto.`);
+          }
+        }
+
         for (const schedule of candidates) {
           try {
             let shouldSend = false;

@@ -88,4 +88,41 @@ router.post('/send', verifyToken, async (req, res) => {
   }
 });
 
+// ── GET /api/whatsapp/debug-pending ────────────────────────────────────────
+// Retorna todas as cobranças ativas com notify_time definido (sem auth — apenas diagnóstico).
+// Remove esta rota após confirmar o funcionamento em produção.
+router.get('/debug-pending', async (req, res) => {
+  try {
+    const { PaymentSchedule: PS } = require('../models');
+    const { Op } = require('sequelize');
+    const now = new Date();
+    const br  = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+    const brHH = String(br.getUTCHours()).padStart(2, '0');
+    const brMM = String(br.getUTCMinutes()).padStart(2, '0');
+    const currentTime = `${brHH}:${brMM}`;
+    const todayDate   = br.toISOString().slice(0, 10);
+
+    const records = await PS.findAll({
+      where: { status: 'active', notify_time: { [Op.ne]: null } },
+      attributes: ['id', 'client_name', 'client_phone', 'due_date', 'recurrence',
+                   'recurring_day', 'notify_time', 'notification_status', 'last_notified_at'],
+      order: [['notify_time', 'ASC']],
+    });
+
+    return res.json({
+      server_utc:  now.toISOString(),
+      server_br:   br.toISOString(),
+      current_time_br: currentTime,
+      today_date_br:   todayDate,
+      provider:    process.env.WHATSAPP_PROVIDER || 'twilio',
+      whatsapp_from: process.env.TWILIO_WHATSAPP_FROM || '(não definido)',
+      content_sid: process.env.TWILIO_CONTENT_SID  || '(não definido — usando texto livre)',
+      total: records.length,
+      records,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

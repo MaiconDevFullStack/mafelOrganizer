@@ -144,11 +144,50 @@ async function sendViaTwilio(phone, text) {
     process.env.TWILIO_ACCOUNT_SID,
     process.env.TWILIO_AUTH_TOKEN
   );
-  const from = process.env.TWILIO_WHATSAPP_FROM; // ex: whatsapp:+5511XXXXXXXXX
+  const from = process.env.TWILIO_WHATSAPP_FROM; // ex: whatsapp:+15559403012
   const to   = `whatsapp:+${phone}`;
 
-  const message = await client.messages.create({ from, to, body: text });
-  return { sid: message.sid, status: message.status, to: message.to };
+  // ── Template (Content SID) ────────────────────────────────────────────────
+  // A API WhatsApp Business do Twilio exige template aprovado para mensagens
+  // proativas (primeiro contato com o cliente). Mensagem livre só funciona
+  // dentro de uma janela de 24h após o cliente ter enviado uma mensagem primeiro.
+  //
+  // Para criar um template:
+  //   Twilio Console → Messaging → Content Template Builder → Create Template
+  //   Depois defina: TWILIO_CONTENT_SID=HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  //
+  // Se TWILIO_CONTENT_SID não estiver definido, tenta envio com texto livre
+  // (funciona no sandbox ou quando há sessão ativa com o cliente).
+  const contentSid = process.env.TWILIO_CONTENT_SID;
+
+  let payload;
+  if (contentSid) {
+    // Extrai variáveis do texto para preencher o template
+    // O template deve ter variáveis {{1}}, {{2}}, etc.
+    // Por padrão envia o texto completo como variável 1
+    payload = { from, to, contentSid };
+    const vars = process.env.TWILIO_CONTENT_VARS;
+    if (vars) payload.contentVariables = vars;
+  } else {
+    payload = { from, to, body: text };
+  }
+
+  try {
+    const message = await client.messages.create(payload);
+    return { sid: message.sid, status: message.status, to: message.to };
+  } catch (err) {
+    // Loga o erro completo do Twilio para diagnóstico
+    const twilioCode = err.code || err.status || 'desconhecido';
+    const moreInfo   = err.moreInfo || '';
+    console.error(`[WhatsApp][Twilio] Erro ${twilioCode} ao enviar para ${to}: ${err.message}`);
+    if (twilioCode === 63016 || twilioCode === '63016') {
+      console.error('[WhatsApp][Twilio] ⚠️  Erro 63016: mensagem fora da janela de sessão ou sem template aprovado.');
+      console.error('[WhatsApp][Twilio]    Solução: crie um template em Twilio Console → Messaging → Content Template Builder');
+      console.error('[WhatsApp][Twilio]    e defina TWILIO_CONTENT_SID=HXxxx... no Railway.');
+    }
+    if (moreInfo) console.error(`[WhatsApp][Twilio]    Mais info: ${moreInfo}`);
+    throw err;
+  }
 }
 
 async function twilioStatus() {
