@@ -170,6 +170,22 @@ app.listen(PORT, '0.0.0.0', () => {
       } catch (e) { console.warn('normalize notify_time:', e.message); }
     })();
 
+    // Corrige cobranças mensais com recurring_day = null (extrai do due_date)
+    (async () => {
+      try {
+        const { Op: OpFix2 } = require('sequelize');
+        const toFix = await PSModel.findAll({
+          where: { recurrence: 'monthly', recurring_day: null },
+          attributes: ['id', 'due_date'],
+        });
+        for (const s of toFix) {
+          const day = parseInt((s.due_date || '').split('-')[2], 10);
+          if (day > 0) await s.update({ recurring_day: day });
+        }
+        if (toFix.length > 0) console.log(`🔧 recurring_day corrigido em ${toFix.length} cobrança(s) mensal(is).`);
+      } catch (e) { console.warn('fix recurring_day:', e.message); }
+    })();
+
     // ── Helpers de timezone BR ───────────────────────────────────────
     function toBrDate(utcDate) {
       return new Date(new Date(utcDate).getTime() - 3 * 60 * 60 * 1000);
@@ -273,8 +289,15 @@ app.listen(PORT, '0.0.0.0', () => {
               shouldSend = (schedule.due_date === todayDate);
 
             } else if (schedule.recurrence === 'monthly') {
-              // Dispara todo mês no dia configurado
-              shouldSend = (Number(schedule.recurring_day) === todayDay);
+              // Dia do mês: usa recurring_day ou extrai do due_date como fallback
+              const monthDay = schedule.recurring_day
+                ? Number(schedule.recurring_day)
+                : parseInt((schedule.due_date || '').split('-')[2] || '0', 10);
+              shouldSend = (monthDay > 0 && monthDay === todayDay);
+              // Corrige o registro no banco silenciosamente se recurring_day estava null
+              if (!schedule.recurring_day && monthDay > 0) {
+                schedule.update({ recurring_day: monthDay }).catch(() => {});
+              }
 
             } else if (schedule.recurrence === 'weekly') {
               // Dispara a cada 7 dias a partir do due_date original
@@ -348,7 +371,10 @@ app.listen(PORT, '0.0.0.0', () => {
             if (schedule.recurrence === 'once') {
               isToday = (schedule.due_date === todayDate);
             } else if (schedule.recurrence === 'monthly') {
-              isToday = (Number(schedule.recurring_day) === todayDay);
+              const monthDay = schedule.recurring_day
+                ? Number(schedule.recurring_day)
+                : parseInt((schedule.due_date || '').split('-')[2] || '0', 10);
+              isToday = (monthDay > 0 && monthDay === todayDay);
             } else if (schedule.recurrence === 'weekly') {
               const dueParts = (schedule.due_date || '').split('-').map(Number);
               if (dueParts.length === 3) {

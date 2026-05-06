@@ -76,6 +76,12 @@ router.post('/schedules', async (req, res) => {
     // Garante formato HH:MM (sem segundos) para o cron comparar corretamente
     if (value.notify_time) value.notify_time = value.notify_time.slice(0, 5);
 
+    // Para cobranças mensais, garante que recurring_day seja preenchido
+    // a partir do due_date quando não informado explicitamente
+    if (value.recurrence === 'monthly' && !value.recurring_day && value.due_date) {
+      value.recurring_day = parseInt(value.due_date.split('-')[2], 10);
+    }
+
     const schedule = await PaymentSchedule.create({
       ...value,
       notification_status: 'pending',
