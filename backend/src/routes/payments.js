@@ -73,6 +73,9 @@ router.post('/schedules', async (req, res) => {
     const { error, value } = scheduleSchema.validate(req.body, { stripUnknown: true });
     if (error) return res.status(400).json({ error: error.details[0].message });
 
+    // Garante formato HH:MM (sem segundos) para o cron comparar corretamente
+    if (value.notify_time) value.notify_time = value.notify_time.slice(0, 5);
+
     const schedule = await PaymentSchedule.create({
       ...value,
       notification_status: 'pending',
@@ -133,7 +136,7 @@ router.post('/schedules/:id/notify', async (req, res) => {
     const tenant = await Tenant.findByPk(schedule.tenant_id, { attributes: ['name'] });
     await notifyClientPayment(schedule, tenant?.name || '');
     await schedule.update({ notification_status: 'sent', last_notified_at: new Date() });
-    res.json({ success: true, message: 'SMS enviado com sucesso.' });
+    res.json({ success: true, message: 'Notificação WhatsApp enviada com sucesso.' });
   } catch (err) {
     res.status(502).json({ error: err.message });
   }

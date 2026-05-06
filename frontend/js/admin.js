@@ -560,10 +560,23 @@
         };
 
         vm.sendSmsNow = function (s) {
-          if (!confirm('Enviar SMS de cobrança agora para ' + s.client_name + ' (' + s.client_phone + ')?')) return;
+          if (!confirm('Enviar lembrete de cobrança via WhatsApp agora para ' + s.client_name + ' (' + s.client_phone + ')?')) return;
           $http.post(API + '/payments/schedules/' + s.id + '/notify')
-            .then(function () { notify('SMS enviado com sucesso!', 'success'); })
-            .catch(function (e) { notify(e.data && e.data.error ? e.data.error : 'Erro ao enviar SMS.', 'error'); });
+            .then(function (r) {
+              notify(r.data.simulated ? 'Simulado (WhatsApp não configurado). Verifique os logs.' : 'Notificação WhatsApp enviada!', r.data.simulated ? 'info' : 'success');
+            })
+            .catch(function (e) { notify(e.data && e.data.error ? e.data.error : 'Erro ao enviar notificação WhatsApp.', 'error'); });
+        };
+
+        vm.resetNotification = function (s) {
+          if (!confirm('Resetar status de notificação de "' + (s.notification_status || 'enviado') + '" para pendente? O job automático enviará no próximo horário configurado.')) return;
+          $http.patch(API + '/payments/schedules/' + s.id, { notification_status: 'pending', last_notified_at: null })
+            .then(function () {
+              s.notification_status = 'pending';
+              s.last_notified_at = null;
+              notify('Status resetado. O job automático reenviará no horário configurado.', 'success');
+            })
+            .catch(function (e) { notify(e.data && e.data.error ? e.data.error : 'Erro ao resetar status.', 'error'); });
         };
 
         vm.executeSchedule = function (s) {

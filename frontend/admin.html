@@ -461,8 +461,11 @@
                     <button class="btn btn-xs btn-info" ng-click="vm.executeSchedule(s)" title="Executar cobrança">
                       <span class="glyphicon glyphicon-play"></span>
                     </button>
-                    <button class="btn btn-xs btn-warning" ng-show="s.client_phone && s.notify_time" ng-click="vm.sendSmsNow(s)" title="Enviar SMS agora">
+                    <button class="btn btn-xs btn-warning" ng-show="s.client_phone && s.notify_time" ng-click="vm.sendSmsNow(s)" title="Enviar WhatsApp agora">
                       <span class="glyphicon glyphicon-send"></span>
+                    </button>
+                    <button class="btn btn-xs btn-default" ng-show="s.client_phone && (s.notification_status === 'sent' || s.notification_status === 'failed')" ng-click="vm.resetNotification(s)" title="Resetar notificação para pendente (job reenviará no horário configurado)">
+                      <span class="glyphicon glyphicon-refresh"></span>
                     </button>
                     <button class="btn btn-xs btn-default" ng-click="vm.openPayModal('receivable', s)">
                       <span class="glyphicon glyphicon-pencil"></span>
@@ -514,8 +517,11 @@
                     <button class="btn btn-xs btn-success" ng-click="vm.executeSchedule(s)" title="Marcar como pago">
                       <span class="glyphicon glyphicon-ok"></span>
                     </button>
-                    <button class="btn btn-xs btn-warning" ng-show="s.client_phone && s.notify_time" ng-click="vm.sendSmsNow(s)" title="Enviar SMS agora">
+                    <button class="btn btn-xs btn-warning" ng-show="s.client_phone && s.notify_time" ng-click="vm.sendSmsNow(s)" title="Enviar WhatsApp agora">
                       <span class="glyphicon glyphicon-send"></span>
+                    </button>
+                    <button class="btn btn-xs btn-default" ng-show="s.client_phone && (s.notification_status === 'sent' || s.notification_status === 'failed')" ng-click="vm.resetNotification(s)" title="Resetar notificação para pendente (job reenviará no horário configurado)">
+                      <span class="glyphicon glyphicon-refresh"></span>
                     </button>
                     <button class="btn btn-xs btn-default" ng-click="vm.openPayModal('payable', s)">
                       <span class="glyphicon glyphicon-pencil"></span>

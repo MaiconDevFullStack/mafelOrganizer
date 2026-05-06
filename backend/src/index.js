@@ -244,11 +244,11 @@ app.listen(PORT, '0.0.0.0', () => {
 
         const { Op } = require('sequelize');
 
-        // Todos os registros ativos e pendentes cujo notify_time bate com o minuto atual
+        // Todos os registros ativos (pending ou failed) cujo notify_time bate com o minuto atual
         const candidates = await PSModel.findAll({
           where: {
             status:              'active',
-            notification_status: 'pending',
+            notification_status: { [Op.in]: ['pending', 'failed'] },
             notify_time:         { [Op.like]: `${currentTime}%` },
           },
         });
@@ -325,7 +325,7 @@ app.listen(PORT, '0.0.0.0', () => {
         const missed = await PSModel.findAll({
           where: {
             status:              'active',
-            notification_status: 'pending',
+            notification_status: { [Op.in]: ['pending', 'failed'] },
             notify_time:         { [Op.ne]: null },
           },
         });
